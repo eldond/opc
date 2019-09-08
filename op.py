@@ -152,8 +152,10 @@ grill = dict(
     top_center=copy_point(front['center_bottom'], 0),
     top_right=(specs['grill_half_width'], gy, 0, 1),
     bottom_right=(specs['grill_half_width'], gy, -specs['grill_height'], 2),
-    bottom_center=(),
+    bottom_center=(front['center_bottom'][0], front['center_bottom'][1], -specs['grill_height'], 3),
 )
+mirror(grill)
+grill['fold_center'] = (0, 3)
 
 
 def plot_path(part, close=True):
@@ -191,7 +193,24 @@ def plot_path(part, close=True):
         axs[1, 0].plot(xf, zf, linestyle='--', color=p10[0].get_color())
         axs[0, 1].plot(yf, zf, linestyle='--', color=p01[0].get_color())
         axs[0, 0].plot(xf, yf, zf, linestyle='--', color=p00[0].get_color())
+    return
 
+
+def plot_images():
+    front_image = '20190826_202031.jpg'
+    front_image_height = 115.0 + 22.0
+    front_image_center = (-10, 30)
+    front_pic = mpl.image.imread(front_image)
+    front_pic = np.swapaxes(front_pic, 0, 1)
+    front_image_width = front_image_height * np.shape(front_pic)[1] / np.shape(front_pic)[0]
+    axs[1, 0].imshow(front_pic, extent=(
+        front_image_center[0] - front_image_width / 2.0, front_image_center[0] + front_image_width / 2.0,
+        front_image_center[1] - front_image_height / 2.0, front_image_center[1] + front_image_width / 2.0,
+    ))
+    return
+
+
+plot_images()
 
 plot_path(rib)
 plot_path(right_side)
