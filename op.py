@@ -11,6 +11,7 @@ axs = np.array([[
     fig.add_subplot(221, projection='3d'), fig.add_subplot(222)],
     [fig.add_subplot(223), fig.add_subplot(224)],
 ])
+
 for ax in axs.flatten():
     ax.set_aspect('equal', adjustable='box')
 
@@ -41,17 +42,49 @@ display = dict(
 )
 
 
+def set_axes_equal(ax3):
+    """
+    Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    cubes as cubes, etc..  This is one possible solution to Matplotlib's
+    ax3.set_aspect('equal') and ax3.axis('equal') not working for 3D.
+
+    https://stackoverflow.com/a/31364297/6605826
+
+    :param ax3: a Matplotlib axes instance with 3D projection
+    """
+
+    x_limits = ax3.get_xlim3d()
+    y_limits = ax3.get_ylim3d()
+    z_limits = ax3.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax3.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax3.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax3.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+    return ax3
+
+
 def mirror(part, as_new=False):
-    ind = [v[3] for k, v in part.items() if not k.startswith('fold')]
+    ind = [vv[3] for k, vv in part.items() if not k.startswith('fold')]
     ii = int(np.nanmax(ind)) + 1
     new_part = {}
-    for k, v in part.items():
+    for k, vv in part.items():
         if k.startswith('fold'):
             if as_new:
-                new_part[k] = v
-        elif ((not np.isnan(v[3])) and (('left' in k) or ('right' in k))) or as_new:
+                new_part[k] = vv
+        elif ((not np.isnan(vv[3])) and (('left' in k) or ('right' in k))) or as_new:
                 newk = k.replace('right', 'left')
-                newv = (-v[0], v[1], v[2], (v[3] if as_new else 2*ii-v[3]))
+                newv = (-vv[0], vv[1], vv[2], (vv[3] if as_new else 2*ii-vv[3]))
                 new_part[newk] = newv
     if as_new:
         return new_part
@@ -136,7 +169,8 @@ flapz = specs['chest_height']+(specs['head_cutout_depth']-specs['head_round_dept
 flapz2 = specs['chest_height']+specs['head_cutout_depth']*np.sin(specs['head_cutout_angle'])
 head_cutout = dict(
     origin=(0, 0, 0, np.NaN),
-    right_front_corner=(specs['head_cutout_width']/2.0-specs['head_round_depth'], head_front, specs['chest_height'], -1),
+    right_front_corner=(specs['head_cutout_width']/2.0-specs['head_round_depth'],
+                        head_front, specs['chest_height'], -1),
     right_corner=(specs['head_cutout_width']/2.0, head_front-specs['head_round_depth'], specs['chest_height'], 0),
     back_right_corner=(specs['head_cutout_width']/2.0, bk+specs['behind_head_margin'], specs['chest_height'], 1),
     flap_right_corner=(specs['head_cutout_width']/2.0, flapy, flapz, 2),
@@ -199,13 +233,13 @@ def plot_path(part, close=True):
 def plot_images():
     front_image = '20190826_202031.jpg'
     front_image_height = 115.0 + 22.0
-    front_image_center = (-10, 30)
+    front_image_center = (-8, 4)
     front_pic = mpl.image.imread(front_image)
     front_pic = np.swapaxes(front_pic, 0, 1)
     front_image_width = front_image_height * np.shape(front_pic)[1] / np.shape(front_pic)[0]
     axs[1, 0].imshow(front_pic, extent=(
         front_image_center[0] - front_image_width / 2.0, front_image_center[0] + front_image_width / 2.0,
-        front_image_center[1] - front_image_height / 2.0, front_image_center[1] + front_image_width / 2.0,
+        front_image_center[1] - front_image_height / 2.0, front_image_center[1] + front_image_height / 2.0,
     ))
     return
 
@@ -220,4 +254,5 @@ plot_path(back)
 plot_path(head_cutout, close=True)
 plot_path(grill)
 
+set_axes_equal(axs[0, 0])
 plt.show()
