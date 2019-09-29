@@ -4,6 +4,8 @@ import matplotlib as mpl
 from matplotlib import pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+import scipy
+from scipy import interpolate
 
 # fig, axs = plt.subplots(2, 2)
 fig = plt.figure()
@@ -20,25 +22,36 @@ specs = dict(
     chest_depth_at_mid=30.0,
     arm_hole_width=15.0,
     behind_arm_margin=5.0,
-    above_arm_margin=2.0,
+    above_arm_margin=5.0,
     prow_angle=10*np.pi/180.0,
     center_rib_cutout_width=25.0,
     center_rib_cutout_depth=5.0,
     center_rib_cutout_angle=45.0*np.pi/180.0,
     center_rib_cutout_bevel=5.0,
     front_slant=10.0*np.pi/180.0,
-    chest_height=40.0,
+    chest_height=25.0,
     head_cutout_width=20.0,
     behind_head_margin=2.0,
     head_cutout_depth=20.0,
     head_round_depth=5.0,
     head_cutout_angle=10.0*np.pi/180.0,
     grill_half_width=10.0,
-    grill_height=20.0,
+    grill_height=15.0,
+    arm_top_cut_width=8.0,
+    arm_top_cut_depth=15.0,
+    arm_back_cover_margin=3.0,
 )
 
 display = dict(
     arm_angle=10.0*np.pi/180.0,
+    arm_spacex=3.0,
+    arm_spacez=-3.0,
+)
+
+reference_images = dict(
+    front_image='20190826_202031.jpg',
+    front_image_height=115.0 + 22.0,
+    front_image_center=(-8, -34+specs['chest_height']),
 )
 
 
@@ -75,6 +88,13 @@ def set_axes_equal(ax3):
 
 
 def mirror(part, as_new=False):
+    """
+    Mirrors a part, either as a new part, or by completing half or a part.
+    Vertices to be mirrored should be named right_* or left_*
+    :param part: dict
+    :param as_new: bool
+    :return: dict
+    """
     ind = [vv[3] for k, vv in part.items() if not k.startswith('fold')]
     ii = int(np.nanmax(ind)) + 1
     new_part = {}
@@ -83,9 +103,9 @@ def mirror(part, as_new=False):
             if as_new:
                 new_part[k] = vv
         elif ((not np.isnan(vv[3])) and (('left' in k) or ('right' in k))) or as_new:
-                newk = k.replace('right', 'left')
-                newv = (-vv[0], vv[1], vv[2], (vv[3] if as_new else 2*ii-vv[3]))
-                new_part[newk] = newv
+            newk = k.replace('right', 'left')
+            newv = (-vv[0], vv[1], vv[2], (vv[3] if as_new else 2*ii-vv[3]))
+            new_part[newk] = newv
     if as_new:
         return new_part
     else:
@@ -154,6 +174,9 @@ mirror(front)
 # Define back
 back = dict(
     origin=(0, 0, 0, np.NaN),
+    right_inner_3=(specs['grill_half_width'], bk, -specs['grill_height'], -3),
+    right_inner_2=(specs['grill_half_width'], bk, -specs['grill_height']+specs['arm_back_cover_margin'], -2),
+    right_inner_1=(specs['grill_half_width']+specs['arm_top_cut_width'], bk, 0, -1),
     right_bottom=copy_point(right_side['back_bottom_corner'], 0),
     right_top=copy_point(right_side['back_top_corner'], 1),
     right_front=copy_point(right_side['front_top_corner'], 2),
@@ -161,6 +184,8 @@ back = dict(
 )
 mirror(back)
 back['fold1'] = (1, 7)
+back['fold2'] = (back['right_inner_1'][-1], back['left_inner_1'][-1])
+
 head_front = bk+specs['behind_head_margin']+specs['head_cutout_depth']
 flapy = bk+specs['behind_head_margin'] + \
         (specs['head_cutout_depth']-specs['head_round_depth'])*np.cos(specs['head_cutout_angle'])
@@ -169,8 +194,8 @@ flapz = specs['chest_height']+(specs['head_cutout_depth']-specs['head_round_dept
 flapz2 = specs['chest_height']+specs['head_cutout_depth']*np.sin(specs['head_cutout_angle'])
 head_cutout = dict(
     origin=(0, 0, 0, np.NaN),
-    right_front_corner=(specs['head_cutout_width']/2.0-specs['head_round_depth'],
-                        head_front, specs['chest_height'], -1),
+    right_front_corner=(
+        specs['head_cutout_width']/2.0-specs['head_round_depth'], head_front, specs['chest_height'], -1),
     right_corner=(specs['head_cutout_width']/2.0, head_front-specs['head_round_depth'], specs['chest_height'], 0),
     back_right_corner=(specs['head_cutout_width']/2.0, bk+specs['behind_head_margin'], specs['chest_height'], 1),
     flap_right_corner=(specs['head_cutout_width']/2.0, flapy, flapz, 2),
@@ -180,19 +205,108 @@ mirror(head_cutout)
 head_cutout['fold_close'] = (1, np.nanmax([v[3] if len(v) == 4 else 0 for v in head_cutout.values()])-2)
 
 # Front grill thing
+rib_back = [rib['cutout_right'], rib['cutout_right_front'], rib['cutout_left_front']]
+rib_back_x = [rb[0] for rb in rib_back]
+rib_back_y = [rb[1] for rb in rib_back]
+if specs['grill_half_width'] > specs['center_rib_cutout_width']/2.0:
+    grill_back = rib['inner_right_corner'][1]
+else:
+    grill_back = scipy.interpolate.interp1d(rib_back_x, rib_back_y, bounds_error=False, fill_value='extrapolate')(
+        specs['grill_half_width'])
 gy = front['center_bottom'][1] - specs['grill_half_width'] * np.tan(specs['prow_angle'])
 grill = dict(
     origin=(0, 0, 0, np.NaN),
     top_center=copy_point(front['center_bottom'], 0),
     top_right=(specs['grill_half_width'], gy, 0, 1),
-    bottom_right=(specs['grill_half_width'], gy, -specs['grill_height'], 2),
-    bottom_center=(front['center_bottom'][0], front['center_bottom'][1], -specs['grill_height'], 3),
+    top_back_right=(specs['grill_half_width'], grill_back, 0, 2),
+    bottom_back_right=(specs['grill_half_width'], grill_back, -specs['grill_height'], 3),
+    bottom_right=(specs['grill_half_width'], gy, -specs['grill_height'], 4),
+    bottom_center=(front['center_bottom'][0], front['center_bottom'][1], -specs['grill_height'], 5),
 )
 mirror(grill)
-grill['fold_center'] = (0, 3)
+grill['fold_center'] = (grill['top_center'][-1], grill['bottom_center'][-1])
+grill['fold_right'] = (grill['top_right'][-1], grill['bottom_right'][-1])
+grill['fold_left'] = (grill['top_left'][-1], grill['bottom_left'][-1])
+
+# Bottom of front grill
+grill_bottom = dict(
+    origin=(0, 0, 0, np.NaN),
+)
+grill_bottom.update({k: v for k, v in grill.items() if k.startswith('bottom_')})
+
+# Arms
+right_arm_origin = (display['arm_spacex'], 0, display['arm_spacez'], np.NaN)
+
+right_arm_top = dict(
+    origin=right_arm_origin,
+    front_right_corner=(copy_point(grill['top_right'], 0)),
+    outer_right_corner=(copy_point(rib['front_right_corner'], 1)),
+    outer_back_corner=(copy_point(back['right_bottom'], 2)),
+    inner_back_corner=(grill['top_right'][0]+specs['arm_top_cut_width'], back['right_bottom'][1], 0, 3),
+    inner_cutout_corner=(
+        grill['top_right'][0]+specs['arm_top_cut_width'], back['right_bottom'][1]+specs['arm_top_cut_depth'], 0, 4,
+    ),
+    inner_front_corner=(grill['top_right'][0], rib['inner_right_corner'][1], 0, 5),
+)
+
+right_arm_bottom = dict(
+    origin=right_arm_origin,
+    front_right_corner=(grill['top_right'][0], grill['top_right'][1], -specs['grill_height'], 0),
+    outer_right_corner=(rib['front_right_corner'][0], rib['front_right_corner'][1], -specs['grill_height'], 1),
+    outer_back_corner=(back['right_bottom'][0], back['right_bottom'][1], -specs['grill_height'], 2),
+    inner_back_corner=(grill['top_right'][0], back['right_bottom'][1], -specs['grill_height'], 3),
+)
+
+right_arm_outer = dict(
+    origin=right_arm_origin,
+    front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
+    outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
+    outer_back_top_corner=copy_point(right_arm_top['outer_back_corner'], 2),
+    outer_back_bottom_corner=(
+        right_arm_top['outer_back_corner'][0], right_arm_top['outer_back_corner'][1], -specs['grill_height'], 3),
+    outer_right_bottom_corner=(
+        right_arm_top['outer_right_corner'][0], right_arm_top['outer_right_corner'][1], -specs['grill_height'], 4),
+    front_right_bottom_corner=(
+        right_arm_top['front_right_corner'][0], right_arm_top['front_right_corner'][1], -specs['grill_height'], 5),
+)
+right_arm_outer['fold1'] = (
+    right_arm_outer['outer_right_top_corner'][-1], right_arm_outer['outer_right_bottom_corner'][-1])
+
+right_arm_back = dict(
+    origin=right_arm_origin,
+    top_inner=copy_point(right_arm_top['inner_back_corner'], 0),
+    top_outer=copy_point(right_arm_top['outer_back_corner'], 1),
+    bottom_outer=copy_point(right_arm_bottom['outer_back_corner'], 2),
+    bottom_inner=copy_point(right_arm_bottom['inner_back_corner'], 3),
+    inner=(
+        right_arm_bottom['inner_back_corner'][0], right_arm_bottom['inner_back_corner'][1],
+        specs['arm_back_cover_margin']-specs['grill_height'], 4,
+    ),
+)
+
+right_arm_inner = dict(
+    origin=right_arm_origin,
+    inner_top=copy_point(right_arm_top['inner_front_corner'], 0),
+    front_top=copy_point(right_arm_top['front_right_corner'], 1),
+    front_bottom=copy_point(right_arm_bottom['front_right_corner'], 2),
+    back_bottom=copy_point(right_arm_bottom['inner_back_corner'], 3),
+    back_top=copy_point(right_arm_back['inner'], 4),
+    inner=(right_arm_top['inner_front_corner'][0], right_arm_top['inner_cutout_corner'][1], right_arm_back['inner'][2], 5),
+)
+
+left_arm_top = mirror(right_arm_top, as_new=True)
+left_arm_bottom = mirror(right_arm_bottom, as_new=True)
+left_arm_outer = mirror(right_arm_outer, as_new=True)
+left_arm_back = mirror(right_arm_back, as_new=True)
+left_arm_inner = mirror(right_arm_inner, as_new=True)
 
 
 def plot_path(part, close=True):
+    """
+    Forms a path from the vertices defined for a part and plots it
+    :param part: dict
+    :param close: bool
+    """
     x, y, z, i = np.array([np.array(point) for k, point in part.items() if not k.startswith('fold')]).T
 
     origin = x[np.isnan(i)], y[np.isnan(i)], z[np.isnan(i)]
@@ -231,21 +345,26 @@ def plot_path(part, close=True):
 
 
 def plot_images():
-    front_image = '20190826_202031.jpg'
-    front_image_height = 115.0 + 22.0
-    front_image_center = (-8, 4)
-    front_pic = mpl.image.imread(front_image)
+    """Plots reference images behind the wireframe"""
+    # Get the pictures
+    front_pic = mpl.image.imread(reference_images['front_image'])
     front_pic = np.swapaxes(front_pic, 0, 1)
-    front_image_width = front_image_height * np.shape(front_pic)[1] / np.shape(front_pic)[0]
+
+    # Get dimensions
+    fh = reference_images['front_image_height']
+    fw = fh * np.shape(front_pic)[1] / np.shape(front_pic)[0]
+    fcx = float(reference_images['front_image_center'][0])
+    fcy = float(reference_images['front_image_center'][1])
     axs[1, 0].imshow(front_pic, extent=(
-        front_image_center[0] - front_image_width / 2.0, front_image_center[0] + front_image_width / 2.0,
-        front_image_center[1] - front_image_height / 2.0, front_image_center[1] + front_image_height / 2.0,
+        fcx - fw / 2.0, fcx + fw / 2.0,
+        fcy - fh / 2.0, fcy + fh / 2.0,
     ))
     return
 
 
 plot_images()
 
+# Torso
 plot_path(rib)
 plot_path(right_side)
 plot_path(left_side)
@@ -253,6 +372,20 @@ plot_path(front)
 plot_path(back)
 plot_path(head_cutout, close=True)
 plot_path(grill)
+plot_path(grill_bottom)
+
+# Arms
+plot_path(right_arm_top)
+plot_path(right_arm_bottom)
+plot_path(right_arm_outer)
+plot_path(right_arm_back)
+plot_path(right_arm_inner)
+
+plot_path(left_arm_top)
+plot_path(left_arm_bottom)
+plot_path(left_arm_outer)
+plot_path(left_arm_back)
+plot_path(left_arm_inner)
 
 set_axes_equal(axs[0, 0])
 plt.show()
