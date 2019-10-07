@@ -6,6 +6,7 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import scipy
 from scipy import interpolate
+import copy
 
 # fig, axs = plt.subplots(2, 2)
 fig = plt.figure()
@@ -16,6 +17,18 @@ axs = np.array([[
 
 for ax in axs.flatten():
     ax.set_aspect('equal', adjustable='box')
+
+
+def make_unfold_fig():
+    figf_ = plt.figure()
+    axf = np.array([[
+        figf_.add_subplot(221, projection='3d'), figf_.add_subplot(222)],
+        [figf_.add_subplot(223), figf_.add_subplot(224)],
+    ])
+    for ax_ in axf.flatten():
+        ax_.set_aspect('equal', adjustable='box')
+    return axf
+
 
 specs = dict(
     shoulder_width=40.0,
@@ -95,13 +108,20 @@ def mirror(part, as_new=False):
     :param as_new: bool
     :return: dict
     """
-    ind = [vv[3] for k, vv in part.items() if not k.startswith('fold')]
+    ind = [vv[3] for k, vv in part.items() if (not k.startswith('fold')) and (isinstance(vv, tuple))]
     ii = int(np.nanmax(ind)) + 1
     new_part = {}
     for k, vv in part.items():
         if k.startswith('fold'):
             if as_new:
                 new_part[k] = vv
+        elif k == 'unfold':
+            if as_new:
+                newv = copy.copy(vv)
+                newv['xt'] = -newv.get('xt', 0)
+                newv['xo'] = -newv.get('xo', 0)
+                newv['zr'] = -newv.get('zr', 0)
+                new_part[k] = newv
         elif ((not np.isnan(vv[3])) and (('left' in k) or ('right' in k))) or as_new:
             newk = k.replace('right', 'left')
             newv = (-vv[0], vv[1], vv[2], (vv[3] if as_new else 2*ii-vv[3]))
@@ -130,6 +150,7 @@ cut_b1y = specs['center_rib_cutout_depth'] - cutout_bevel_y
 cut_b1x = specs['center_rib_cutout_width']/2.0 - cutout_bevel_x
 rib = dict(
     origin=(0, 0, 0, np.NaN),
+    unfold=dict(xr=90, zt=-(front_margin+prow_depth+2)),
     front_center=(0, front_margin+prow_depth, 0, 0),
     front_right_corner=(rt, front_margin, 0, 1),
     outer_right_corner=(rt, 0, 0, 2),
@@ -146,6 +167,7 @@ armx = rt + (specs['chest_height'] - specs['above_arm_margin'])*np.sin(display['
 armz = (specs['chest_height'] - specs['above_arm_margin'])*(1-np.cos(display['arm_angle']))
 right_side = dict(
     origin=(0, 0, 0, np.NaN),
+    unfold=dict(zr=90, xo=rt, yo=bk),
     bottom_front=copy_point(rib['front_right_corner'], 0),
     bottom_armpit_front=copy_point(rib['outer_right_corner'], 1),
     top_armpit_front=(rt, 0, armhole_height, 2),
@@ -161,29 +183,34 @@ right_side = dict(
 left_side = mirror(right_side, as_new=True)
 
 # Define cab front / windshield
-front = dict(
+front_right = dict(
     origin=(0, 0, 0, np.NaN),
+    unfold=dict(
+        xo=0, yo=front_margin-slant_dy+prow_depth, zo=specs['chest_height'],
+        zr=-specs['prow_angle']*180.0/np.pi,
+        xr=-specs['front_slant']*180.0/np.pi,
+        yt=-front_margin-slant_dy+prow_depth,
+    ),
     center_top=(0, front_margin-slant_dy+prow_depth, specs['chest_height'], 0),
     right_top=copy_point(right_side['front_top_corner'], 1),
     right_bottom=copy_point(right_side['bottom_front'], 2),
     center_bottom=copy_point(rib['front_center'], 3),
-    fold1=(0, 3),
+    # fold1=(0, 3),
 )
-mirror(front)
+front_left = mirror(front_right, as_new=True)
 
 # Define back
 back = dict(
     origin=(0, 0, 0, np.NaN),
+    unfold=dict(xr=0, yr=0, xt=0, yt=0, zt=0),
     right_inner_3=(specs['grill_half_width'], bk, -specs['grill_height'], -3),
     right_inner_2=(specs['grill_half_width'], bk, -specs['grill_height']+specs['arm_back_cover_margin'], -2),
     right_inner_1=(specs['grill_half_width']+specs['arm_top_cut_width'], bk, 0, -1),
     right_bottom=copy_point(right_side['back_bottom_corner'], 0),
     right_top=copy_point(right_side['back_top_corner'], 1),
-    right_front=copy_point(right_side['front_top_corner'], 2),
-    center_front=copy_point(front['center_top'], 3),
 )
 mirror(back)
-back['fold1'] = (1, 7)
+# back['fold1'] = (1, 7)
 back['fold2'] = (back['right_inner_1'][-1], back['left_inner_1'][-1])
 
 head_front = bk+specs['behind_head_margin']+specs['head_cutout_depth']
@@ -204,6 +231,17 @@ head_cutout = dict(
 mirror(head_cutout)
 head_cutout['fold_close'] = (1, np.nanmax([v[3] if len(v) == 4 else 0 for v in head_cutout.values()])-2)
 
+# Top
+top = dict(
+    origin=(0, 0, 0, np.NaN),
+    unfold=dict(xr=90, yo=back['right_top'][1], zo=back['right_top'][2]),
+    right_back=copy_point(right_side['back_top_corner'], 1),
+    right_front=copy_point(right_side['front_top_corner'], 2),
+    center_front=copy_point(front_right['center_top'], 3),
+)
+mirror(top)
+head_cutout['unfold'] = top['unfold']
+
 # Front grill thing
 rib_back = [rib['cutout_right'], rib['cutout_right_front'], rib['cutout_left_front']]
 rib_back_x = [rb[0] for rb in rib_back]
@@ -213,15 +251,16 @@ if specs['grill_half_width'] > specs['center_rib_cutout_width']/2.0:
 else:
     grill_back = scipy.interpolate.interp1d(rib_back_x, rib_back_y, bounds_error=False, fill_value='extrapolate')(
         specs['grill_half_width'])
-gy = front['center_bottom'][1] - specs['grill_half_width'] * np.tan(specs['prow_angle'])
+gy = front_right['center_bottom'][1] - specs['grill_half_width'] * np.tan(specs['prow_angle'])
 grill = dict(
     origin=(0, 0, 0, np.NaN),
-    top_center=copy_point(front['center_bottom'], 0),
+    unfold=dict(auto='z', cx=0, cy=grill_back, cz=-specs['grill_height']/2.0, zt=-specs['grill_height']+rib['unfold']['zt']),
+    top_center=copy_point(front_right['center_bottom'], 0),
     top_right=(specs['grill_half_width'], gy, 0, 1),
     top_back_right=(specs['grill_half_width'], grill_back, 0, 2),
     bottom_back_right=(specs['grill_half_width'], grill_back, -specs['grill_height'], 3),
     bottom_right=(specs['grill_half_width'], gy, -specs['grill_height'], 4),
-    bottom_center=(front['center_bottom'][0], front['center_bottom'][1], -specs['grill_height'], 5),
+    bottom_center=(front_right['center_bottom'][0], front_right['center_bottom'][1], -specs['grill_height'], 5),
 )
 mirror(grill)
 grill['fold_center'] = (grill['top_center'][-1], grill['bottom_center'][-1])
@@ -231,6 +270,7 @@ grill['fold_left'] = (grill['top_left'][-1], grill['bottom_left'][-1])
 # Bottom of front grill
 grill_bottom = dict(
     origin=(0, 0, 0, np.NaN),
+    unfold=dict(xr=90, zo=-specs['grill_height'], zt=rib['unfold']['zt']),
 )
 grill_bottom.update({k: v for k, v in grill.items() if k.startswith('bottom_')})
 
@@ -301,13 +341,15 @@ left_arm_back = mirror(right_arm_back, as_new=True)
 left_arm_inner = mirror(right_arm_inner, as_new=True)
 
 
-def plot_path(part, close=True):
+def plot_path(part, close=True, unfold=False, uidx=0):
     """
     Forms a path from the vertices defined for a part and plots it
     :param part: dict
     :param close: bool
+    :param unfold: bool
+    :param uidx: int
     """
-    x, y, z, i = np.array([np.array(point) for k, point in part.items() if not k.startswith('fold')]).T
+    x, y, z, i = np.array([np.array(point) for k, point in part.items() if 'fold' not in k[0:6]]).T
 
     origin = x[np.isnan(i)], y[np.isnan(i)], z[np.isnan(i)]
     x = x[~np.isnan(i)] + origin[0]
@@ -325,10 +367,60 @@ def plot_path(part, close=True):
         z = np.append(z, z[0])
         i = np.append(i, -1000)
 
-    p11 = axs[1, 1].plot(x, y)
-    p10 = axs[1, 0].plot(x, z)
-    p01 = axs[0, 1].plot(y, z)
-    p00 = axs[0, 0].plot(x, y, z)
+    if unfold:
+        while (uidx+1) > len(axsf):
+            axsf.append(make_unfold_fig())
+        x0 = copy.copy(x)
+        y0 = copy.copy(y)
+        z0 = copy.copy(z)
+        auto_unfold = part.get('unfold', {}).get('auto', None)
+        # Translation along all axes
+        xt = part.get('unfold', {}).get('xt', 0)
+        yt = part.get('unfold', {}).get('yt', 0)
+        zt = part.get('unfold', {}).get('zt', 0)
+        # Center of part for auto-unfolds
+        cx = part.get('unfold', {}).get('cx', np.mean(x))
+        cy = part.get('unfold', {}).get('cy', np.mean(y))
+        cz = part.get('unfold', {}).get('cz', np.mean(z))
+        if auto_unfold is None:
+            # Rotation about X and Z axes
+            xr = part.get('unfold', {}).get('xr', 0) * np.pi/180.0
+            zr = part.get('unfold', {}).get('zr', 0) * np.pi/180.0
+            # Origin of rotation
+            xo = part.get('unfold', {}).get('xo', 0)
+            yo = part.get('unfold', {}).get('yo', 0)
+            zo = part.get('unfold', {}).get('zo', 0)
+            # Rotate about x axis
+            y = (y0-yo)*np.cos(xr)+yo - (z0-zo)*np.sin(xr)
+            z = (z0-zo)*np.cos(xr)+zo + (y0-yo)*np.sin(xr)
+            # Rotate about z axis
+            y00 = copy.copy(y)
+            x = (x0-xo)*np.cos(zr)+xo + (y00-yo)*np.sin(zr)
+            y = (y00-yo)*np.cos(zr)+yo - (x0-xo)*np.sin(zr)
+        if auto_unfold == 'z':
+            # Automatic unfold while leaving z alone (flatten x-y)
+            theta = np.arctan2(y-cy, x-cx) - np.pi
+            dth = np.diff(theta)
+            sdth = np.sign(dth)
+            dx = np.diff(x)
+            dy = np.diff(y)
+            ds = np.sqrt(dx**2+dy**2) * sdth
+
+            x = np.cumsum(np.append(0, ds))
+            y = x*0
+
+        # Translate
+        x += xt
+        y += yt
+        z += zt
+        axu = axsf[uidx]
+    else:
+        axu = axs
+
+    p11 = axu[1, 1].plot(x, y)
+    p10 = axu[1, 0].plot(x, z)
+    p01 = axu[0, 1].plot(y, z)
+    p00 = axu[0, 0].plot(x, y, z)
 
     folds = [k for k in part if k.startswith('fold')]
     for fold in folds:
@@ -337,10 +429,11 @@ def plot_path(part, close=True):
         yf = np.append(y[i == f[0]], y[i == f[1]])
         zf = np.append(
             z[i == f[0]], z[i == f[1]])
-        axs[1, 1].plot(xf, yf, linestyle='--', color=p11[0].get_color())
-        axs[1, 0].plot(xf, zf, linestyle='--', color=p10[0].get_color())
-        axs[0, 1].plot(yf, zf, linestyle='--', color=p01[0].get_color())
-        axs[0, 0].plot(xf, yf, zf, linestyle='--', color=p00[0].get_color())
+
+        axu[1, 1].plot(xf, yf, linestyle='--', color=p11[0].get_color())
+        axu[1, 0].plot(xf, zf, linestyle='--', color=p10[0].get_color())
+        axu[0, 1].plot(yf, zf, linestyle='--', color=p01[0].get_color())
+        axu[0, 0].plot(xf, yf, zf, linestyle='--', color=p00[0].get_color())
     return
 
 
@@ -362,13 +455,20 @@ def plot_images():
     return
 
 
+def plot_unfolded(part, uidx=0):
+    plot_path(part, unfold=True, uidx=uidx)
+    return
+
+
 plot_images()
 
 # Torso
 plot_path(rib)
 plot_path(right_side)
 plot_path(left_side)
-plot_path(front)
+plot_path(top)
+plot_path(front_right)
+plot_path(front_left)
 plot_path(back)
 plot_path(head_cutout, close=True)
 plot_path(grill)
@@ -387,5 +487,21 @@ plot_path(left_arm_outer)
 plot_path(left_arm_back)
 plot_path(left_arm_inner)
 
+# Unfolded
+axsf = []
+# Torso
+plot_unfolded(back)
+plot_unfolded(top)
+plot_unfolded(head_cutout)
+plot_unfolded(right_side)
+plot_unfolded(left_side)
+plot_unfolded(front_right, 1)
+plot_unfolded(front_left, 1)
+plot_unfolded(rib, 1)
+plot_unfolded(grill_bottom, 1)
+plot_unfolded(grill, 1)
+
 set_axes_equal(axs[0, 0])
+for axs_ in axsf:
+    set_axes_equal(axs_[0, 0])
 plt.show()
