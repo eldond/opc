@@ -288,6 +288,8 @@ right_arm_top = dict(
     ),
     inner_front_corner=(grill['top_right'][0], rib['inner_right_corner'][1], 0, 5),
 )
+xyzo = right_arm_top['outer_right_corner']
+right_arm_top['unfold'] = dict(zr=90, yr=-90, xo=xyzo[0], yo=xyzo[1], zo=xyzo[2], yt=-xyzo[1]-right_arm_origin[0])
 
 right_arm_bottom = dict(
     origin=right_arm_origin,
@@ -299,6 +301,7 @@ right_arm_bottom = dict(
 
 right_arm_outer = dict(
     origin=right_arm_origin,
+    unfold=dict(auto='z'),
     front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
     outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
     outer_back_top_corner=copy_point(right_arm_top['outer_back_corner'], 2),
@@ -385,6 +388,7 @@ def plot_path(part, close=True, unfold=False, uidx=0):
         if auto_unfold is None:
             # Rotation about X and Z axes
             xr = part.get('unfold', {}).get('xr', 0) * np.pi/180.0
+            yr = part.get('unfold', {}).get('yr', 0) * np.pi / 180.0
             zr = part.get('unfold', {}).get('zr', 0) * np.pi/180.0
             # Origin of rotation
             xo = part.get('unfold', {}).get('xo', 0)
@@ -393,10 +397,15 @@ def plot_path(part, close=True, unfold=False, uidx=0):
             # Rotate about x axis
             y = (y0-yo)*np.cos(xr)+yo - (z0-zo)*np.sin(xr)
             z = (z0-zo)*np.cos(xr)+zo + (y0-yo)*np.sin(xr)
+            # Rotate about y axis
+            z00 = copy.copy(z)
+            x = (x0 - xo) * np.cos(yr) + xo - (z00 - zo) * np.sin(yr)
+            z = (z00 - zo) * np.cos(yr) + zo + (x0 - xo) * np.sin(yr)
             # Rotate about z axis
+            x00 = copy.copy(x)
             y00 = copy.copy(y)
-            x = (x0-xo)*np.cos(zr)+xo + (y00-yo)*np.sin(zr)
-            y = (y00-yo)*np.cos(zr)+yo - (x0-xo)*np.sin(zr)
+            x = (x00-xo)*np.cos(zr)+xo + (y00-yo)*np.sin(zr)
+            y = (y00-yo)*np.cos(zr)+yo - (x00-xo)*np.sin(zr)
         if auto_unfold == 'z':
             # Automatic unfold while leaving z alone (flatten x-y)
             theta = np.arctan2(y-cy, x-cx) - np.pi
@@ -500,6 +509,11 @@ plot_unfolded(front_left, 1)
 plot_unfolded(rib, 1)
 plot_unfolded(grill_bottom, 1)
 plot_unfolded(grill, 1)
+
+# Arms
+plot_unfolded(right_arm_top, 2)
+plot_unfolded(right_arm_outer, 2)
+
 
 set_axes_equal(axs[0, 0])
 for axs_ in axsf:
