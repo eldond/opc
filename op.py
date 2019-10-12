@@ -8,28 +8,6 @@ import scipy
 from scipy import interpolate
 import copy
 
-# fig, axs = plt.subplots(2, 2)
-fig = plt.figure()
-axs = np.array([[
-    fig.add_subplot(221, projection='3d'), fig.add_subplot(222)],
-    [fig.add_subplot(223), fig.add_subplot(224)],
-])
-
-for ax in axs.flatten():
-    ax.set_aspect('equal', adjustable='box')
-
-
-def make_unfold_fig():
-    figf_ = plt.figure()
-    axf = np.array([[
-        figf_.add_subplot(221, projection='3d'), figf_.add_subplot(222)],
-        [figf_.add_subplot(223), figf_.add_subplot(224)],
-    ])
-    for ax_ in axf.flatten():
-        ax_.set_aspect('equal', adjustable='box')
-    return axf
-
-
 specs = dict(
     shoulder_width=40.0,
     chest_depth_at_mid=30.0,
@@ -68,6 +46,33 @@ reference_images = dict(
     front_image_height=115.0 + 22.0,
     front_image_center=(-8, -34+specs['chest_height']),
 )
+
+available_figures = ['assembled', 'unfolded_torso_back', 'unfolded_torso_extra', 'unfolded_right_arm']
+which_figures = available_figures[3]
+
+if 'assembled' in which_figures:
+    # fig, axs = plt.subplots(2, 2)
+    fig = plt.figure()
+    axs = np.array([[
+        fig.add_subplot(221, projection='3d'), fig.add_subplot(222)],
+        [fig.add_subplot(223), fig.add_subplot(224)],
+    ])
+
+    for ax in axs.flatten():
+        ax.set_aspect('equal', adjustable='box')
+else:
+    fig = axs = None
+
+
+def make_unfold_fig():
+    figf_ = plt.figure()
+    axf = np.array([[
+        figf_.add_subplot(221, projection='3d'), figf_.add_subplot(222)],
+        [figf_.add_subplot(223), figf_.add_subplot(224)],
+    ])
+    for ax_ in axf.flatten():
+        ax_.set_aspect('equal', adjustable='box')
+    return axf
 
 
 def set_axes_equal(ax3):
@@ -279,6 +284,10 @@ grill_bottom.update({k: v for k, v in grill.items() if k.startswith('bottom_')})
 
 # Arms
 right_arm_origin = (display['arm_spacex'], 0, display['arm_spacez'], np.NaN)
+ra_pivot_x = rib['front_right_corner'][0] + right_arm_origin[0]
+ra_pivot_y = rib['front_right_corner'][1] + right_arm_origin[1]
+ra_pivot_zt = rib['front_right_corner'][2] + right_arm_origin[2]
+ra_pivot_zb = -specs['grill_height'] + right_arm_origin[2]
 
 right_arm_top = dict(
     origin=right_arm_origin,
@@ -317,6 +326,7 @@ right_arm_outer = dict(
 
 right_arm_front = dict(
     origin=right_arm_origin,
+    unfold=dict(zr=90-specs['prow_angle']*180.0/np.pi, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
     front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
     outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
     outer_right_bottom_corner=(
@@ -404,7 +414,9 @@ def plot_path(part, close=True, unfold=False, uidx=0):
 
     if unfold:
         while (uidx+1) > len(axsf):
-            axsf.append(make_unfold_fig())
+            axsf.append(None)
+        if axsf[uidx] is None:
+            axsf[uidx] = make_unfold_fig()
         x0 = copy.copy(x)
         y0 = copy.copy(y)
         z0 = copy.copy(z)
@@ -495,52 +507,63 @@ def plot_unfolded(part, uidx=0):
     return
 
 
-plot_images()
+if 'assembled' in which_figures:
+    plot_images()
 
-# Torso
-plot_path(rib)
-plot_path(right_side)
-plot_path(left_side)
-plot_path(top)
-plot_path(front_right)
-plot_path(front_left)
-plot_path(back)
-plot_path(head_cutout, close=True)
-plot_path(grill)
-plot_path(grill_bottom)
+    # Torso
+    plot_path(rib)
+    plot_path(right_side)
+    plot_path(left_side)
+    plot_path(top)
+    plot_path(front_right)
+    plot_path(front_left)
+    plot_path(back)
+    plot_path(head_cutout, close=True)
+    plot_path(grill)
+    plot_path(grill_bottom)
 
-# Arms
-plot_path(right_arm_top)
-plot_path(right_arm_bottom)
-plot_path(right_arm_outer)
-plot_path(right_arm_front)
-plot_path(right_arm_back)
-plot_path(right_arm_inner)
-plot_path(right_arm_hand_cutout)
+    # Arms
+    plot_path(right_arm_top)
+    plot_path(right_arm_bottom)
+    plot_path(right_arm_outer)
+    plot_path(right_arm_front)
+    plot_path(right_arm_back)
+    plot_path(right_arm_inner)
+    plot_path(right_arm_hand_cutout)
 
-plot_path(left_arm_top)
-plot_path(left_arm_bottom)
-plot_path(left_arm_outer)
-plot_path(left_arm_front)
-plot_path(left_arm_back)
-plot_path(left_arm_inner)
-plot_path(left_arm_hand_cutout)
+    plot_path(left_arm_top)
+    plot_path(left_arm_bottom)
+    plot_path(left_arm_outer)
+    plot_path(left_arm_front)
+    plot_path(left_arm_back)
+    plot_path(left_arm_inner)
+    plot_path(left_arm_hand_cutout)
+
+    set_axes_equal(axs[0, 0])
 
 # Unfolded
 axsf = []
 # Torso
-plot_unfolded(back)
-plot_unfolded(top)
-plot_unfolded(head_cutout)
-plot_unfolded(right_side)
-plot_unfolded(left_side)
-plot_unfolded(front_right, 1)
-plot_unfolded(front_left, 1)
-plot_unfolded(rib, 1)
-plot_unfolded(grill_bottom, 1)
-plot_unfolded(grill, 1)
+if 'unfolded_torso_back' in which_figures:
+    plot_unfolded(back)
+    plot_unfolded(top)
+    plot_unfolded(head_cutout)
+    plot_unfolded(right_side)
+    plot_unfolded(left_side)
+if 'unfolded_torso_extra' in which_figures:
+    plot_unfolded(front_right, 1)
+    plot_unfolded(front_left, 1)
+    plot_unfolded(rib, 1)
+    plot_unfolded(grill_bottom, 1)
+    plot_unfolded(grill, 1)
 
-set_axes_equal(axs[0, 0])
+# Arms
+if 'right_arm' in which_figures:
+    plot_unfolded(right_arm_outer, 2)
+    plot_unfolded(right_arm_front, 2)
+
+
 for axs_ in axsf:
-    set_axes_equal(axs_[0, 0])
+    if axs_ is not None:
+        set_axes_equal(axs_[0, 0])
 plt.show()
