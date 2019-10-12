@@ -25,7 +25,6 @@ specs = dict(
     behind_head_margin=2.0,
     head_cutout_depth=20.0,
     head_round_depth=5.0,
-    head_cutout_angle=10.0*np.pi/180.0,
     grill_half_width=10.0,
     grill_height=15.0,
     arm_top_cut_width=8.0,
@@ -36,9 +35,14 @@ specs = dict(
 )
 
 display = dict(
-    arm_angle=10.0*np.pi/180.0,
+    head_cutout_angle=0.0,  # 10.0*np.pi/180.0,
+    arm_angle=0.0,  # 10.0*np.pi/180.0,
     arm_spacex=3.0,
     arm_spacez=-3.0,
+    all_unfold_dx=[0, 75.0, 55.0, 125.0],
+    all_unfold_dy=[0, 0.0, 80.0, 80.0],
+    debug_unfold=False,
+    mark_points=True,
 )
 
 reference_images = dict(
@@ -47,8 +51,11 @@ reference_images = dict(
     front_image_center=(-8, -34+specs['chest_height']),
 )
 
-available_figures = ['assembled', 'unfolded_torso_back', 'unfolded_torso_extra', 'unfolded_right_arm']
+available_figures = [
+    'assembled', 'unfolded_torso_back', 'unfolded_torso_extra', 'unfolded_right_arm', 'unfolded_left_arm',
+]
 which_figures = available_figures
+mpl.rcParams['figure.figsize'] = [10.75, 8.25]
 
 if 'assembled' in which_figures:
     # fig, axs = plt.subplots(2, 2)
@@ -68,21 +75,37 @@ if 'assembled' in which_figures:
 else:
     fig = axs = None
 
+if [wf for wf in which_figures if 'unfolded' in wf]:
+    figaf, axaf = plt.subplots(1)
+    axaf.set_aspect('equal', adjustable='box')
+else:
+    figaf = axaf = None
+
+unfold_figs = []
+
 
 def make_unfold_fig():
-    figf_ = plt.figure()
-    axf = np.array([[
-        figf_.add_subplot(221, projection='3d'), figf_.add_subplot(222)],
-        [figf_.add_subplot(223), figf_.add_subplot(224)],
-    ])
-    axf[1, 1].set_xlabel('x')
-    axf[1, 1].set_ylabel('y')
-    axf[1, 0].set_xlabel('x')
-    axf[1, 0].set_ylabel('z')
-    axf[0, 1].set_xlabel('y')
-    axf[0, 1].set_ylabel('z')
+    if display['debug_unfold']:
+        figf_ = plt.figure()
+        axf = np.array([[
+            figf_.add_subplot(221, projection='3d'), figf_.add_subplot(222)],
+            [figf_.add_subplot(223), figf_.add_subplot(224)],
+        ])
+        axf[1, 1].set_xlabel('x')
+        axf[1, 1].set_ylabel('y')
+        axf[1, 0].set_xlabel('x')
+        axf[1, 0].set_ylabel('z')
+        axf[0, 1].set_xlabel('y')
+        axf[0, 1].set_ylabel('z')
+    else:
+        figf_, axf = plt.subplots(1, squeeze=False)
+        axf[0, 0].set_xlabel('x')
+        axf[0, 0].set_ylabel('z')
     for ax_ in axf.flatten():
         ax_.set_aspect('equal', adjustable='box')
+
+    unfold_figs.append(figf_)
+
     return axf
 
 
@@ -139,6 +162,7 @@ def mirror(part, as_new=False):
                 newv['xt'] = -newv.get('xt', 0)
                 newv['xo'] = -newv.get('xo', 0)
                 newv['zr'] = -newv.get('zr', 0)
+                newv['yr'] = -newv.get('yr', 0)
                 new_part[k] = newv
         elif ((not np.isnan(vv[3])) and (('left' in k) or ('right' in k))) or as_new:
             newk = k.replace('right', 'left')
@@ -233,10 +257,11 @@ back['fold2'] = (back['right_inner_1'][-1], back['left_inner_1'][-1])
 
 head_front = bk+specs['behind_head_margin']+specs['head_cutout_depth']
 flapy = bk+specs['behind_head_margin'] + \
-        (specs['head_cutout_depth']-specs['head_round_depth'])*np.cos(specs['head_cutout_angle'])
-flapy2 = bk+specs['behind_head_margin'] + specs['head_cutout_depth']*np.cos(specs['head_cutout_angle'])
-flapz = specs['chest_height']+(specs['head_cutout_depth']-specs['head_round_depth'])*np.sin(specs['head_cutout_angle'])
-flapz2 = specs['chest_height']+specs['head_cutout_depth']*np.sin(specs['head_cutout_angle'])
+        (specs['head_cutout_depth']-specs['head_round_depth'])*np.cos(display['head_cutout_angle'])
+flapy2 = bk+specs['behind_head_margin'] + specs['head_cutout_depth']*np.cos(display['head_cutout_angle'])
+flapz = specs['chest_height']+(specs['head_cutout_depth'] -
+                               specs['head_round_depth'])*np.sin(display['head_cutout_angle'])
+flapz2 = specs['chest_height']+specs['head_cutout_depth']*np.sin(display['head_cutout_angle'])
 head_cutout = dict(
     origin=(0, 0, 0, np.NaN),
     right_front_corner=(
@@ -433,6 +458,54 @@ def plot_path(part, close=True, unfold=False, uidx=0):
         z = np.append(z, z[0])
         i = np.append(i, -1000)
 
+    def draw_path(axx, xx, yy, **kw):
+        pp = axx.plot(xx, yy, **kw)
+        pcx = np.nanmean(xx)
+        pcy = np.nanmean(yy)
+        co = pp[0].get_color()
+        if display['mark_points'] and unfold:
+            lastx = np.NaN
+            lasty = np.NaN
+            for xx_, yy_ in zip(xx, yy):
+                if xx_ != lastx:
+                    axx.axvline(xx_, color='gray', lw=0.5, alpha=0.2)
+                if yy_ != lasty:
+                    axx.axhline(yy_, color='gray', lw=0.5, alpha=0.2)
+                if (xx_ != lastx) or (yy_ != lasty):
+                    ccx = (xx_ + lastx)/2.0
+                    ccy = (yy_ + lasty)/2.0
+                    outx = ccx - pcx
+                    outy = ccy - pcy
+                    ll = np.sqrt((outx**2 + outy**2))
+                    outs = 3.0
+                    outx *= outs/ll
+                    outy *= outs/ll
+                    if (outy > 0) and (outx/outy > 4):
+                        outx = outs
+                        outy = 0
+                    if (outx > 0) and (outy / outx > 4):
+                        outy = outs
+                        outx = 0
+                    m1x = xx_ * 0.75 + lastx * 0.25
+                    m2x = xx_ * 0.25 + lastx * 0.75
+                    m1y = yy_ * 0.75 + lasty * 0.25
+                    m2y = yy_ * 0.25 + lasty * 0.75
+                    dxx = xx_ - lastx
+                    dyy = yy_ - lasty
+                    # direction = np.sign(np.arctan2(dyy, dxx))
+                    # outx *= direction
+                    # outy *= direction
+                    axx.plot([m1x + outx, xx_ + outx], [m1y + outy, yy_ + outy], color=co, lw=0.5, alpha=0.2)
+                    axx.plot([m2x + outx, lastx + outx], [m2y + outy, lasty + outy], color=co, lw=0.5, alpha=0.2)
+                    axx.text(
+                        ccx+outx, ccy+outy, '{:0.2f}\n{:0.2f}'.format(abs(dxx), abs(dyy)),
+                        color=co, ha='center', va='center', size=5,
+                    )
+                lastx = xx_
+                lasty = yy_
+
+        return pp
+
     if unfold:
         while (uidx+1) > len(axsf):
             axsf.append(None)
@@ -449,7 +522,7 @@ def plot_path(part, close=True, unfold=False, uidx=0):
         # Center of part for auto-unfolds
         cx = part.get('unfold', {}).get('cx', np.mean(x))
         cy = part.get('unfold', {}).get('cy', np.mean(y))
-        cz = part.get('unfold', {}).get('cz', np.mean(z))
+        # cz = part.get('unfold', {}).get('cz', np.mean(z))
         if auto_unfold is None:
             # Rotation about X and Z axes
             xr = part.get('unfold', {}).get('xr', 0) * np.pi/180.0
@@ -488,13 +561,20 @@ def plot_path(part, close=True, unfold=False, uidx=0):
         y += yt
         z += zt
         axu = axsf[uidx]
+
+        paf = axaf.plot(x+display['all_unfold_dx'][uidx], z+display['all_unfold_dy'][uidx])
     else:
         axu = axs
+        paf = None
 
-    p11 = axu[1, 1].plot(x, y)
-    p10 = axu[1, 0].plot(x, z)
-    p01 = axu[0, 1].plot(y, z)
-    p00 = axu[0, 0].plot(x, y, z)
+    if unfold and not display['debug_unfold']:
+        p10 = draw_path(axu[0, 0], x, z)
+        p00 = p01 = p11 = None
+    else:
+        p11 = draw_path(axu[1, 1], x, y)
+        p10 = draw_path(axu[1, 0], x, z)
+        p01 = draw_path(axu[0, 1], y, z)
+        p00 = axu[0, 0].plot(x, y, z)
 
     folds = [k for k in part if k.startswith('fold')]
     for fold in folds:
@@ -503,11 +583,19 @@ def plot_path(part, close=True, unfold=False, uidx=0):
         yf = np.append(y[i == f[0]], y[i == f[1]])
         zf = np.append(
             z[i == f[0]], z[i == f[1]])
+        if unfold:
+            axaf.plot(
+                xf+display['all_unfold_dx'][uidx], zf+display['all_unfold_dy'][uidx],
+                linestyle='--', color=paf[0].get_color(),
+            )
 
-        axu[1, 1].plot(xf, yf, linestyle='--', color=p11[0].get_color())
-        axu[1, 0].plot(xf, zf, linestyle='--', color=p10[0].get_color())
-        axu[0, 1].plot(yf, zf, linestyle='--', color=p01[0].get_color())
-        axu[0, 0].plot(xf, yf, zf, linestyle='--', color=p00[0].get_color())
+        if unfold and not display['debug_unfold']:
+            axu[0, 0].plot(xf, zf, linestyle='--', color=p10[0].get_color())
+        else:
+            axu[1, 1].plot(xf, yf, linestyle='--', color=p11[0].get_color())
+            axu[1, 0].plot(xf, zf, linestyle='--', color=p10[0].get_color())
+            axu[0, 1].plot(yf, zf, linestyle='--', color=p01[0].get_color())
+            axu[0, 0].plot(xf, yf, zf, linestyle='--', color=p00[0].get_color())
     return
 
 
@@ -567,6 +655,7 @@ if 'assembled' in which_figures:
     plot_path(left_arm_hand_cutout)
 
     set_axes_equal(axs[0, 0])
+    fig.savefig('costume_assembled.pdf')
 
 # Unfolded
 axsf = []
@@ -594,7 +683,23 @@ if 'unfolded_right_arm' in which_figures:
     plot_unfolded(right_arm_inner, 2)
     plot_unfolded(right_arm_hand_cutout, 2)
 
+if 'unfolded_left_arm' in which_figures:
+    plot_unfolded(left_arm_outer, 3)
+    plot_unfolded(left_arm_front, 3)
+    plot_unfolded(left_arm_top, 3)
+    plot_unfolded(left_arm_bottom, 3)
+    plot_unfolded(left_arm_back, 3)
+    plot_unfolded(left_arm_inner, 3)
+    plot_unfolded(left_arm_hand_cutout, 3)
+
 for axs_ in axsf:
-    if axs_ is not None:
+    if (axs_ is not None) and display['debug_unfold']:
         set_axes_equal(axs_[0, 0])
+
+for iuf, uf in enumerate(unfold_figs):
+    uf.savefig('costume_folded_{}.pdf'.format(iuf))
+
+if figaf is not None:
+    figaf.savefig('costume_all_folded.pdf')
+
 plt.show()
