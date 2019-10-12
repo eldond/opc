@@ -53,6 +53,8 @@ specs = dict(
     arm_top_cut_width=8.0,
     arm_top_cut_depth=15.0,
     arm_back_cover_margin=3.0,
+    hand_hole_margins=dict(top=1.5, bottom=1.5, front=1.5, back=2.0),
+    hand_hole_depth=12.0,
 )
 
 display = dict(
@@ -254,7 +256,8 @@ else:
 gy = front_right['center_bottom'][1] - specs['grill_half_width'] * np.tan(specs['prow_angle'])
 grill = dict(
     origin=(0, 0, 0, np.NaN),
-    unfold=dict(auto='z', cx=0, cy=grill_back, cz=-specs['grill_height']/2.0, zt=-specs['grill_height']+rib['unfold']['zt']),
+    unfold=dict(
+        auto='z', cx=0, cy=grill_back, cz=-specs['grill_height']/2.0, zt=-specs['grill_height']+rib['unfold']['zt']),
     top_center=copy_point(front_right['center_bottom'], 0),
     top_right=(specs['grill_half_width'], gy, 0, 1),
     top_back_right=(specs['grill_half_width'], grill_back, 0, 2),
@@ -299,18 +302,28 @@ right_arm_bottom = dict(
 
 right_arm_outer = dict(
     origin=right_arm_origin,
-    front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
+    # front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
     outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
     outer_back_top_corner=copy_point(right_arm_top['outer_back_corner'], 2),
     outer_back_bottom_corner=(
         right_arm_top['outer_back_corner'][0], right_arm_top['outer_back_corner'][1], -specs['grill_height'], 3),
     outer_right_bottom_corner=(
         right_arm_top['outer_right_corner'][0], right_arm_top['outer_right_corner'][1], -specs['grill_height'], 4),
-    front_right_bottom_corner=(
-        right_arm_top['front_right_corner'][0], right_arm_top['front_right_corner'][1], -specs['grill_height'], 5),
+    # front_right_bottom_corner=(
+    #     right_arm_top['front_right_corner'][0], right_arm_top['front_right_corner'][1], -specs['grill_height'], 5),
 )
-right_arm_outer['fold1'] = (
-    right_arm_outer['outer_right_top_corner'][-1], right_arm_outer['outer_right_bottom_corner'][-1])
+# right_arm_outer['fold1'] = (
+#     right_arm_outer['outer_right_top_corner'][-1], right_arm_outer['outer_right_bottom_corner'][-1])
+
+right_arm_front = dict(
+    origin=right_arm_origin,
+    front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
+    outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
+    outer_right_bottom_corner=(
+        right_arm_top['outer_right_corner'][0], right_arm_top['outer_right_corner'][1], -specs['grill_height'], 2),
+    front_right_bottom_corner=(
+        right_arm_top['front_right_corner'][0], right_arm_top['front_right_corner'][1], -specs['grill_height'], 3),
+)
 
 right_arm_back = dict(
     origin=right_arm_origin,
@@ -331,14 +344,36 @@ right_arm_inner = dict(
     front_bottom=copy_point(right_arm_bottom['front_right_corner'], 2),
     back_bottom=copy_point(right_arm_bottom['inner_back_corner'], 3),
     back_top=copy_point(right_arm_back['inner'], 4),
-    inner=(right_arm_top['inner_front_corner'][0], right_arm_top['inner_cutout_corner'][1], right_arm_back['inner'][2], 5),
+    inner=(right_arm_top['inner_front_corner'][0],
+           right_arm_top['inner_cutout_corner'][1], right_arm_back['inner'][2], 5),
+)
+
+fr_y = right_arm_inner['front_top'][1]-specs['hand_hole_margins']['front']
+bk_y = right_arm_inner['front_top'][1]-specs['hand_hole_margins']['front']-specs['hand_hole_depth']
+tp_z = right_arm_inner['front_top'][2]-specs['hand_hole_margins']['top']
+bt_z = right_arm_inner['front_bottom'][2]+specs['hand_hole_margins']['bottom']
+tp_y = right_arm_inner['inner_top'][1]+specs['hand_hole_margins']['back']
+raiit = right_arm_inner['inner_top']
+raii = right_arm_inner['inner']
+bk_z = tp_z - (raiit[2]-raii[2]) / (raiit[1]-raii[1]) * (tp_y-bk_y)
+
+hhrx = right_arm_inner['front_top'][0]
+right_arm_hand_cutout = dict(
+    origin=right_arm_origin,
+    top_front=(hhrx, fr_y, tp_z, 0),
+    bottom_front=(hhrx, fr_y, bt_z, 1),
+    bottom_back=(hhrx, bk_y, bt_z, 2),
+    back_top=(hhrx, bk_y, bk_z, 3),
+    top_back=(hhrx, tp_y, tp_z, 4),
 )
 
 left_arm_top = mirror(right_arm_top, as_new=True)
 left_arm_bottom = mirror(right_arm_bottom, as_new=True)
 left_arm_outer = mirror(right_arm_outer, as_new=True)
+left_arm_front = mirror(right_arm_front, as_new=True)
 left_arm_back = mirror(right_arm_back, as_new=True)
 left_arm_inner = mirror(right_arm_inner, as_new=True)
+left_arm_hand_cutout = mirror(right_arm_hand_cutout, as_new=True)
 
 
 def plot_path(part, close=True, unfold=False, uidx=0):
@@ -478,14 +513,18 @@ plot_path(grill_bottom)
 plot_path(right_arm_top)
 plot_path(right_arm_bottom)
 plot_path(right_arm_outer)
+plot_path(right_arm_front)
 plot_path(right_arm_back)
 plot_path(right_arm_inner)
+plot_path(right_arm_hand_cutout)
 
 plot_path(left_arm_top)
 plot_path(left_arm_bottom)
 plot_path(left_arm_outer)
+plot_path(left_arm_front)
 plot_path(left_arm_back)
 plot_path(left_arm_inner)
+plot_path(left_arm_hand_cutout)
 
 # Unfolded
 axsf = []
