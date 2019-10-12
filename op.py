@@ -48,7 +48,7 @@ reference_images = dict(
 )
 
 available_figures = ['assembled', 'unfolded_torso_back', 'unfolded_torso_extra', 'unfolded_right_arm']
-which_figures = available_figures[3]
+which_figures = available_figures#[3]
 
 if 'assembled' in which_figures:
     # fig, axs = plt.subplots(2, 2)
@@ -291,6 +291,7 @@ ra_pivot_zb = -specs['grill_height'] + right_arm_origin[2]
 
 right_arm_top = dict(
     origin=right_arm_origin,
+    unfold=dict(rx=0, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
     front_right_corner=(copy_point(grill['top_right'], 0)),
     outer_right_corner=(copy_point(rib['front_right_corner'], 1)),
     outer_back_corner=(copy_point(back['right_bottom'], 2)),
@@ -313,6 +314,7 @@ right_arm_bottom = dict(
 
 right_arm_outer = dict(
     origin=right_arm_origin,
+    unfold=dict(zr=0, xr=0, yr=0),
     # front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
     outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
     outer_back_top_corner=copy_point(right_arm_top['outer_back_corner'], 2),
@@ -434,7 +436,7 @@ def plot_path(part, close=True, unfold=False, uidx=0):
         if auto_unfold is None:
             # Rotation about X and Z axes
             xr = part.get('unfold', {}).get('xr', 0) * np.pi/180.0
-            yr = part.get('unfold', {}).get('yr', 0) * np.pi / 180.0
+            yr = part.get('unfold', {}).get('yr', 0) * np.pi/180.0
             zr = part.get('unfold', {}).get('zr', 0) * np.pi/180.0
             # Origin of rotation
             xo = part.get('unfold', {}).get('xo', 0)
@@ -566,9 +568,10 @@ if 'unfolded_torso_extra' in which_figures:
     plot_unfolded(grill, 1)
 
 # Arms
-if 'right_arm' in which_figures:
+if 'unfolded_right_arm' in which_figures:
     plot_unfolded(right_arm_outer, 2)
     plot_unfolded(right_arm_front, 2)
+    plot_unfolded(right_arm_top, 2)
 
 for axs_ in axsf:
     if axs_ is not None:
