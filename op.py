@@ -31,7 +31,7 @@ specs = dict(
     arm_top_cut_width=8.0,
     arm_top_cut_depth=15.0,
     arm_back_cover_margin=3.0,
-    hand_hole_margins=dict(top=1.5, bottom=1.5, front=1.5, back=2.0),
+    hand_hole_margins=dict(top=2.0, bottom=2.0, front=2.0, back=2.0),
     hand_hole_depth=12.0,
 )
 
@@ -48,7 +48,7 @@ reference_images = dict(
 )
 
 available_figures = ['assembled', 'unfolded_torso_back', 'unfolded_torso_extra', 'unfolded_right_arm']
-which_figures = available_figures#[3]
+which_figures = available_figures
 
 if 'assembled' in which_figures:
     # fig, axs = plt.subplots(2, 2)
@@ -57,7 +57,12 @@ if 'assembled' in which_figures:
         fig.add_subplot(221, projection='3d'), fig.add_subplot(222)],
         [fig.add_subplot(223), fig.add_subplot(224)],
     ])
-
+    axs[1, 1].set_xlabel('x')
+    axs[1, 1].set_ylabel('y')
+    axs[1, 0].set_xlabel('x')
+    axs[1, 0].set_ylabel('z')
+    axs[0, 1].set_xlabel('y')
+    axs[0, 1].set_ylabel('z')
     for ax in axs.flatten():
         ax.set_aspect('equal', adjustable='box')
 else:
@@ -70,6 +75,12 @@ def make_unfold_fig():
         figf_.add_subplot(221, projection='3d'), figf_.add_subplot(222)],
         [figf_.add_subplot(223), figf_.add_subplot(224)],
     ])
+    axf[1, 1].set_xlabel('x')
+    axf[1, 1].set_ylabel('y')
+    axf[1, 0].set_xlabel('x')
+    axf[1, 0].set_ylabel('z')
+    axf[0, 1].set_xlabel('y')
+    axf[0, 1].set_ylabel('z')
     for ax_ in axf.flatten():
         ax_.set_aspect('equal', adjustable='box')
     return axf
@@ -291,7 +302,7 @@ ra_pivot_zb = -specs['grill_height'] + right_arm_origin[2]
 
 right_arm_top = dict(
     origin=right_arm_origin,
-    unfold=dict(rx=0, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
+    unfold=dict(zr=90, yr=-90, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
     front_right_corner=(copy_point(grill['top_right'], 0)),
     outer_right_corner=(copy_point(rib['front_right_corner'], 1)),
     outer_back_corner=(copy_point(back['right_bottom'], 2)),
@@ -301,11 +312,12 @@ right_arm_top = dict(
     ),
     inner_front_corner=(grill['top_right'][0], rib['inner_right_corner'][1], 0, 5),
 )
-xyzo = right_arm_top['outer_right_corner']
-right_arm_top['unfold'] = dict(zr=90, yr=-90, xo=xyzo[0], yo=xyzo[1], zo=xyzo[2], yt=-xyzo[1]-right_arm_origin[0])
+# xyzo = right_arm_top['outer_right_corner']
+# right_arm_top['unfold'] = dict(zr=90, yr=-90, xo=xyzo[0], yo=xyzo[1], zo=xyzo[2], yt=-xyzo[1]-right_arm_origin[0])
 
 right_arm_bottom = dict(
     origin=right_arm_origin,
+    unfold=dict(zr=90, yr=90, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zb),
     front_right_corner=(grill['top_right'][0], grill['top_right'][1], -specs['grill_height'], 0),
     outer_right_corner=(rib['front_right_corner'][0], rib['front_right_corner'][1], -specs['grill_height'], 1),
     outer_back_corner=(back['right_bottom'][0], back['right_bottom'][1], -specs['grill_height'], 2),
@@ -314,7 +326,7 @@ right_arm_bottom = dict(
 
 right_arm_outer = dict(
     origin=right_arm_origin,
-    unfold=dict(zr=0, xr=0, yr=0),
+    unfold=dict(zr=90, xr=0, yr=0, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
     # front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
     outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
     outer_back_top_corner=copy_point(right_arm_top['outer_back_corner'], 2),
@@ -330,7 +342,7 @@ right_arm_outer = dict(
 
 right_arm_front = dict(
     origin=right_arm_origin,
-    unfold=dict(zr=90-specs['prow_angle']*180.0/np.pi, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
+    unfold=dict(zr=180-specs['prow_angle']*180.0/np.pi, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
     front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
     outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
     outer_right_bottom_corner=(
@@ -339,8 +351,10 @@ right_arm_front = dict(
         right_arm_top['front_right_corner'][0], right_arm_top['front_right_corner'][1], -specs['grill_height'], 3),
 )
 
+arm_outer_len = right_arm_top['outer_back_corner'][1]-right_arm_top['outer_right_corner'][1]
 right_arm_back = dict(
     origin=right_arm_origin,
+    unfold=dict(xt=arm_outer_len, yt=-arm_outer_len),
     top_inner=copy_point(right_arm_top['inner_back_corner'], 0),
     top_outer=copy_point(right_arm_top['outer_back_corner'], 1),
     bottom_outer=copy_point(right_arm_bottom['outer_back_corner'], 2),
@@ -351,8 +365,10 @@ right_arm_back = dict(
     ),
 )
 
+arm_width = right_arm_bottom['outer_back_corner'][0]-right_arm_bottom['inner_back_corner'][0]
 right_arm_inner = dict(
     origin=right_arm_origin,
+    unfold=dict(yr=180, zr=90, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zb, zt=-arm_width, yt=arm_width),
     inner_top=copy_point(right_arm_top['inner_front_corner'], 0),
     front_top=copy_point(right_arm_top['front_right_corner'], 1),
     front_bottom=copy_point(right_arm_bottom['front_right_corner'], 2),
@@ -374,6 +390,7 @@ bk_z = tp_z - (raiit[2]-raii[2]) / (raiit[1]-raii[1]) * (tp_y-bk_y)
 hhrx = right_arm_inner['front_top'][0]
 right_arm_hand_cutout = dict(
     origin=right_arm_origin,
+    unfold=right_arm_inner['unfold'],
     top_front=(hhrx, fr_y, tp_z, 0),
     bottom_front=(hhrx, fr_y, bt_z, 1),
     bottom_back=(hhrx, bk_y, bt_z, 2),
@@ -572,6 +589,10 @@ if 'unfolded_right_arm' in which_figures:
     plot_unfolded(right_arm_outer, 2)
     plot_unfolded(right_arm_front, 2)
     plot_unfolded(right_arm_top, 2)
+    plot_unfolded(right_arm_bottom, 2)
+    plot_unfolded(right_arm_back, 2)
+    plot_unfolded(right_arm_inner, 2)
+    plot_unfolded(right_arm_hand_cutout, 2)
 
 for axs_ in axsf:
     if axs_ is not None:
