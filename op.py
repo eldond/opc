@@ -32,6 +32,7 @@ specs = dict(
     arm_back_cover_margin=3.0,
     hand_hole_margins=dict(top=2.0, bottom=2.0, front=2.0, back=2.0),
     hand_hole_depth=12.0,
+    window_margins=dict(top=3.0, bottom=3.0, outer=3.0, inner=2.0),
 )
 
 display = dict(
@@ -241,6 +242,45 @@ front_right = dict(
 )
 front_left = mirror(front_right, as_new=True)
 
+wdz = np.cos(specs['front_slant'])
+wds = np.sin(specs['front_slant'])
+wdx = np.cos(specs['prow_angle'])
+window_top = front_right['center_top'][2] - specs['window_margins']['top']*wdz
+window_top2 = window_top - 7*wdz
+window_bottom = front_right['center_bottom'][2] + specs['window_margins']['bottom']*wdz
+window_inner_x = 0 + specs['window_margins']['inner']*wdx
+window_inner_x2 = window_inner_x + 3*wdx
+window_inner_x3 = window_inner_x + 2*wdx
+window_outer_x = front_right['right_top'][0] - specs['window_margins']['outer']*wdx
+
+
+def rwy(wx, wz):
+    """Gives y coordinate for (x, z) on the front right window"""
+    xct, yct, zct = front_right['center_top'][0:3]
+    dx = wx-xct
+    dz = wz-zct
+    dy = -dz * np.sin(specs['front_slant']) - dx * np.sin(specs['prow_angle'])
+    return yct + dy
+
+
+right_window = dict(
+    origin=(0, 0, 0, np.NaN),
+    unfold=front_right['unfold'],
+    logo_bottom_inner=(window_inner_x, 0, window_top2, -2),
+    logo_bottom_outer=(window_inner_x3, 0, window_top2, -1),
+    inner_top=(window_inner_x2, 0, window_top, 0),
+    outer_top=(window_outer_x, 0, window_top, 1),
+    outer_bottom=(window_outer_x, 0, window_bottom, 2),
+    inner_bottom=(window_inner_x+wdx, 0, window_bottom, 3),
+)
+for pt in right_window:
+    if pt not in ['origin', 'unfold']:
+        v = right_window[pt]
+        newy = rwy(v[0], v[2])
+        right_window[pt] = (v[0], newy, v[2], v[3])
+
+left_window = mirror(right_window, as_new=True)
+
 # Define back
 back = dict(
     origin=(0, 0, 0, np.NaN),
@@ -432,7 +472,7 @@ left_arm_inner = mirror(right_arm_inner, as_new=True)
 left_arm_hand_cutout = mirror(right_arm_hand_cutout, as_new=True)
 
 
-def plot_path(part, close=True, unfold=False, uidx=0):
+def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_points']):
     """
     Forms a path from the vertices defined for a part and plots it
     :param part: dict
@@ -463,7 +503,7 @@ def plot_path(part, close=True, unfold=False, uidx=0):
         pcx = np.nanmean(xx)
         pcy = np.nanmean(yy)
         co = pp[0].get_color()
-        if display['mark_points'] and unfold:
+        if mark_points and unfold:
             lastx = np.NaN
             lasty = np.NaN
             for xx_, yy_ in zip(xx, yy):
@@ -617,8 +657,8 @@ def plot_images():
     return
 
 
-def plot_unfolded(part, uidx=0):
-    plot_path(part, unfold=True, uidx=uidx)
+def plot_unfolded(part, uidx=0, mark_points=display['mark_points']):
+    plot_path(part, unfold=True, uidx=uidx, mark_points=mark_points)
     return
 
 
@@ -632,6 +672,8 @@ if 'assembled' in which_figures:
     plot_path(top)
     plot_path(front_right)
     plot_path(front_left)
+    plot_path(right_window)
+    plot_path(left_window)
     plot_path(back)
     plot_path(head_cutout, close=True)
     plot_path(grill)
@@ -664,11 +706,13 @@ if 'unfolded_torso_back' in which_figures:
     plot_unfolded(back)
     plot_unfolded(top)
     plot_unfolded(head_cutout)
-    plot_unfolded(right_side)
+    plot_unfolded(right_side, mark_points=False)
     plot_unfolded(left_side)
 if 'unfolded_torso_extra' in which_figures:
     plot_unfolded(front_right, 1)
     plot_unfolded(front_left, 1)
+    plot_unfolded(right_window, 1)
+    plot_unfolded(left_window, 1, mark_points=False)
     plot_unfolded(rib, 1)
     plot_unfolded(grill_bottom, 1)
     plot_unfolded(grill, 1)
