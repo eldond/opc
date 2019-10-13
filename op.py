@@ -33,6 +33,12 @@ specs = dict(
     hand_hole_margins=dict(top=2.0, bottom=2.0, front=2.0, back=2.0),
     hand_hole_depth=12.0,
     window_margins=dict(top=3.0, bottom=3.0, outer=3.0, inner=2.0),
+    internal_support_back_depth=7.0,
+    internal_support_top_height=2.0,
+    internal_support_front_margin=1.0,
+    internal_support_back_vert_extent=15.0,
+    internal_support_back_taper_extent=10.0,
+    internal_support_curve_height=10.0,
 )
 
 display = dict(
@@ -55,7 +61,7 @@ reference_images = dict(
 available_figures = [
     'assembled', 'unfolded_torso_back', 'unfolded_torso_extra', 'unfolded_right_arm', 'unfolded_left_arm',
 ]
-which_figures = available_figures
+which_figures = available_figures[0:3]
 mpl.rcParams['figure.figsize'] = [10.75, 8.25]
 
 if 'assembled' in which_figures:
@@ -325,15 +331,25 @@ top = dict(
 mirror(top)
 head_cutout['unfold'] = top['unfold']
 
+
 # Front grill thing
-rib_back = [rib['cutout_right'], rib['cutout_right_front'], rib['cutout_left_front']]
-rib_back_x = [rb[0] for rb in rib_back]
-rib_back_y = [rb[1] for rb in rib_back]
-if specs['grill_half_width'] > specs['center_rib_cutout_width']/2.0:
-    grill_back = rib['inner_right_corner'][1]
-else:
-    grill_back = scipy.interpolate.interp1d(rib_back_x, rib_back_y, bounds_error=False, fill_value='extrapolate')(
-        specs['grill_half_width'])
+def y_along_rib_back(xval):
+    rib_back = [rib['cutout_right'], rib['cutout_right_front'], rib['cutout_left_front']]
+    rib_back_x = [rb[0] for rb in rib_back]
+    rib_back_y = [rb[1] for rb in rib_back]
+    if xval > specs['center_rib_cutout_width'] / 2.0:
+        yval = rib['inner_right_corner'][1]
+    else:
+        yval = scipy.interpolate.interp1d(rib_back_x, rib_back_y, bounds_error=False, fill_value='extrapolate')(xval)
+    return yval
+
+
+# if specs['grill_half_width'] > specs['center_rib_cutout_width']/2.0:
+#     grill_back = rib['inner_right_corner'][1]
+# else:
+#     grill_back = scipy.interpolate.interp1d(rib_back_x, rib_back_y, bounds_error=False, fill_value='extrapolate')(
+#         specs['grill_half_width'])
+grill_back = y_along_rib_back(specs['grill_half_width'])
 gy = front_right['center_bottom'][1] - specs['grill_half_width'] * np.tan(specs['prow_angle'])
 grill = dict(
     origin=(0, 0, 0, np.NaN),
@@ -357,6 +373,55 @@ grill_bottom = dict(
     unfold=dict(xr=90, zo=-specs['grill_height'], zt=rib['unfold']['zt']),
 )
 grill_bottom.update({k: v for k, v in grill.items() if k.startswith('bottom_')})
+
+# Internal supports
+isrx = specs['head_cutout_width']/2.0
+isr_curve_front = head_front-specs['internal_support_front_margin']
+isr_curve_dy = (isr_curve_front - (bk+specs['internal_support_back_depth']))/2.0
+isr_curve_dz = specs['internal_support_curve_height']
+isr_curve_bottom = specs['chest_height'] - specs['internal_support_top_height'] - isr_curve_dz
+nseg = 8
+th = np.arange(nseg+1)/float(nseg) * np.pi
+isr_curve_y = isr_curve_front - isr_curve_dy * (1-np.cos(th))
+isr_curve_z = isr_curve_bottom + isr_curve_dz * np.sin(th)
+print(isr_curve_dy)
+
+internal_support_right = dict(
+    origin=(0, 0, 0, np.NaN),
+    unfold=dict(zr=90, xt=-35, zt=-40),
+    back_inner_bottom=(
+        isrx, bk+specs['internal_support_back_depth'],
+        specs['chest_height']-specs['internal_support_back_vert_extent'], 0,
+    ),
+    back_taper_bottom=(
+        isrx, bk,
+        specs['chest_height']-specs['internal_support_back_vert_extent']-specs['internal_support_back_taper_extent'],
+        1,
+    ),
+    back_top=(isrx, bk, specs['chest_height'], 2),
+    front_top=(isrx, rwy(isrx, specs['chest_height']), specs['chest_height'], 3),
+    front_bottom=(isrx, rwy(isrx, 0), 0, 4),
+    front_inner_bottom=(isrx, y_along_rib_back(isrx), 0, 5),
+    front_inner=(isrx, isr_curve_front, specs['chest_height']-specs['internal_support_back_vert_extent'], 6),
+)
+for k in range(nseg+1):
+    internal_support_right['curve_{}'.format(k)] = (isrx, isr_curve_y[k], isr_curve_z[k], 7+k)
+
+internal_support_left = mirror(internal_support_right, as_new=True)
+
+internal_support_top = dict(
+    origin=(0, 0, 0, np.NaN),
+    unfold=dict(auto='y'),
+)
+path = ['front_inner'] + [k for k in internal_support_right if k.startswith('curve_')] + ['back_inner_bottom']
+for k, pt in enumerate(path):
+    internal_support_top['outer_right_{}'.format(k)] = (
+        rt, internal_support_right[pt][1], internal_support_right[pt][2], k)
+mirror(internal_support_top)
+for k in range(len(path)):
+    internal_support_top['fold_{}'.format(k)] = (
+        internal_support_top['outer_right_{}'.format(k)][3], internal_support_top['outer_left_{}'.format(k)][3])
+
 
 # Arms
 right_arm_origin = (display['arm_spacex'], 0, display['arm_spacez'], np.NaN)
@@ -479,6 +544,7 @@ def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_
     :param close: bool
     :param unfold: bool
     :param uidx: int
+    :param mark_points: bool
     """
     x, y, z, i = np.array([np.array(point) for k, point in part.items() if 'fold' not in k[0:6]]).T
 
@@ -678,6 +744,9 @@ if 'assembled' in which_figures:
     plot_path(head_cutout, close=True)
     plot_path(grill)
     plot_path(grill_bottom)
+    plot_path(internal_support_right)
+    plot_path(internal_support_left)
+    plot_path(internal_support_top)
 
     # Arms
     plot_path(right_arm_top)
@@ -716,6 +785,9 @@ if 'unfolded_torso_extra' in which_figures:
     plot_unfolded(rib, 1)
     plot_unfolded(grill_bottom, 1)
     plot_unfolded(grill, 1)
+    plot_unfolded(internal_support_right, 1)
+    plot_unfolded(internal_support_left, 1)
+    plot_unfolded(internal_support_top, 1)
 
 # Arms
 if 'unfolded_right_arm' in which_figures:
