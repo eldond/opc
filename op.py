@@ -8,6 +8,8 @@ import scipy
 from scipy import interpolate
 import copy
 
+np.seterr(all='raise')
+
 specs = dict(
     shoulder_width=40.0,
     chest_depth_at_mid=30.0,
@@ -415,13 +417,13 @@ internal_support_top = dict(
 )
 path = ['front_inner'] + [k for k in internal_support_right if k.startswith('curve_')] + ['back_inner_bottom']
 for k, pt in enumerate(path[::-1]):
-    internal_support_top['outer_right_{}'.format(nseg+1+1-k)] = (
+    internal_support_top['curve_outer_right_{}'.format(nseg+1+1-k)] = (
         rt, internal_support_right[pt][1], internal_support_right[pt][2], k)
 cut_back = (-1+np.cos(specs['internal_support_top_cut_angle']))*isr_curve_dy + isr_curve_front
 for k, pt in enumerate(path):
 
     if internal_support_right[pt][1] >= cut_back:
-        internal_support_top['inner_right_{}'.format(k)] = (
+        internal_support_top['curve_inner_right_{}'.format(k)] = (
             isrx, internal_support_right[pt][1], internal_support_right[pt][2], k+nseg+2)
 
 mirror(internal_support_top)
@@ -429,14 +431,16 @@ mirror(internal_support_top)
 mark_fold_every = 2
 for k in range(len(path)):
     if k % mark_fold_every == 0:
-        if 'inner_right_{}'.format(k) in internal_support_top:
-            new_idx = internal_support_top['inner_right_{}'.format(k)][3]
+        if 'curve_inner_right_{}'.format(k) in internal_support_top:
+            new_idx = internal_support_top['curve_inner_right_{}'.format(k)][3]
             internal_support_top['fold_{}_L'.format(k)] = (
-                internal_support_top['outer_left_{}'.format(k)][3], internal_support_top['inner_left_{}'.format(k)][3])
+                internal_support_top['curve_outer_left_{}'.format(k)][3],
+                internal_support_top['curve_inner_left_{}'.format(k)][3],
+            )
         else:
-            new_idx = internal_support_top['outer_left_{}'.format(k)][3]
+            new_idx = internal_support_top['curve_outer_left_{}'.format(k)][3]
         internal_support_top['fold_{}'.format(k)] = (
-            internal_support_top['outer_right_{}'.format(k)][3], new_idx)
+            internal_support_top['curve_outer_right_{}'.format(k)][3], new_idx)
 
 
 # Arms
@@ -563,8 +567,9 @@ def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_
     :param mark_points: bool
     """
     x, y, z, i = np.array([np.array(point) for k, point in part.items() if 'fold' not in k[0:6]]).T
-
+    names = np.array([k for k in part if 'fold' not in k[0:6]])
     origin = x[np.isnan(i)], y[np.isnan(i)], z[np.isnan(i)]
+    names = names[~np.isnan(i)]
     x = x[~np.isnan(i)] + origin[0]
     y = y[~np.isnan(i)] + origin[1]
     z = z[~np.isnan(i)] + origin[2]
@@ -574,58 +579,84 @@ def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_
     y = y[j]
     z = z[j]
     i = i[j]
+    names = names[j]
     if close:
         x = np.append(x, x[0])
         y = np.append(y, y[0])
         z = np.append(z, z[0])
         i = np.append(i, -1000)
+        names = np.append(names, 'automatic_closer____')
 
     def draw_path(axx, xx, yy, **kw):
         pp = axx.plot(xx, yy, **kw)
         pcx = np.nanmean(xx)
         pcy = np.nanmean(yy)
         co = pp[0].get_color()
+
+        def marky_mark(x0_, x1_, y0_, y1_):
+            ccx = (x1_ + x0_) / 2.0
+            ccy = (y1_ + y0_) / 2.0
+            outx = ccx - pcx
+            outy = ccy - pcy
+            ll = np.sqrt((outx ** 2 + outy ** 2))
+            outs = 3.0
+            outx *= outs / ll
+            outy *= outs / ll
+            if (outy > 0) and (outx / outy > 4):
+                outx = outs
+                outy = 0
+            if (outx > 0) and (outy / outx > 4):
+                outy = outs
+                outx = 0
+            m1x = x1_ * 0.75 + x0_ * 0.25
+            m2x = x1_ * 0.25 + x0_ * 0.75
+            m1y = y1_ * 0.75 + y0_ * 0.25
+            m2y = y1_ * 0.25 + y0_ * 0.75
+            dxx = x1_ - x0_
+            dyy = y1_ - y0_
+            # direction = np.sign(np.arctan2(dyy, dxx))
+            # outx *= direction
+            # outy *= direction
+            axx.plot([m1x + outx, x1_ + outx], [m1y + outy, y1_ + outy], color=co, lw=0.5, alpha=0.2)
+            axx.plot([m2x + outx, x0_ + outx], [m2y + outy, y0_ + outy], color=co, lw=0.5, alpha=0.2)
+            axx.text(
+                ccx + outx, ccy + outy, '{:0.2f}\n{:0.2f}'.format(abs(dxx), abs(dyy)),
+                color=co, ha='center', va='center', size=5,
+            )
+
         if mark_points and unfold:
             lastx = np.NaN
             lasty = np.NaN
-            for xx_, yy_ in zip(xx, yy):
-                if xx_ != lastx:
-                    axx.axvline(xx_, color='gray', lw=0.5, alpha=0.2)
-                if yy_ != lasty:
-                    axx.axhline(yy_, color='gray', lw=0.5, alpha=0.2)
-                if (xx_ != lastx) or (yy_ != lasty):
-                    ccx = (xx_ + lastx)/2.0
-                    ccy = (yy_ + lasty)/2.0
-                    outx = ccx - pcx
-                    outy = ccy - pcy
-                    ll = np.sqrt((outx**2 + outy**2))
-                    outs = 3.0
-                    outx *= outs/ll
-                    outy *= outs/ll
-                    if (outy > 0) and (outx/outy > 4):
-                        outx = outs
-                        outy = 0
-                    if (outx > 0) and (outy / outx > 4):
-                        outy = outs
-                        outx = 0
-                    m1x = xx_ * 0.75 + lastx * 0.25
-                    m2x = xx_ * 0.25 + lastx * 0.75
-                    m1y = yy_ * 0.75 + lasty * 0.25
-                    m2y = yy_ * 0.25 + lasty * 0.75
-                    dxx = xx_ - lastx
-                    dyy = yy_ - lasty
-                    # direction = np.sign(np.arctan2(dyy, dxx))
-                    # outx *= direction
-                    # outy *= direction
-                    axx.plot([m1x + outx, xx_ + outx], [m1y + outy, yy_ + outy], color=co, lw=0.5, alpha=0.2)
-                    axx.plot([m2x + outx, lastx + outx], [m2y + outy, lasty + outy], color=co, lw=0.5, alpha=0.2)
-                    axx.text(
-                        ccx+outx, ccy+outy, '{:0.2f}\n{:0.2f}'.format(abs(dxx), abs(dyy)),
-                        color=co, ha='center', va='center', size=5,
-                    )
+            last_curve = False
+            lastnn = ''
+            lastx_curve = np.NaN
+            lasty_curve = np.NaN
+            for xx_, yy_, nn_ in zip(xx, yy, names):
+                is_curve = nn_.startswith('curve')
+                diff_curve = '_'.join(lastnn.split('_')[:-1]) != '_'.join(nn_.split('_')[:-1])
+                if (not (last_curve and is_curve)) or diff_curve:
+                    if xx_ != lastx:
+                        axx.axvline(xx_, color='gray', lw=0.5, alpha=0.2)
+                    if yy_ != lasty:
+                        axx.axhline(yy_, color='gray', lw=0.5, alpha=0.2)
+                if last_curve and ((not is_curve) or diff_curve):
+                    axx.axvline(lastx, color='gray', lw=0.5, alpha=0.2)
+                    axx.axhline(lasty, color='gray', lw=0.5, alpha=0.2)
+                if ((xx_ != lastx) or (yy_ != lasty)) and (not is_curve):
+                    marky_mark(lastx, xx_, lasty, yy_)
+                if last_curve and ((not is_curve) or diff_curve):
+                    print('close out last curve', lastnn, nn_, lastx_curve, lastx, lasty_curve, lasty)
+                    marky_mark(lastx_curve, lastx, lasty_curve, lasty)
+                #print(nn_, lastnn, last_curve and ((not is_curve) or diff_curve), diff_curve, is_curve, last_curve)
+
+                if ((not last_curve) or diff_curve) and is_curve:
+                    print('start new curve', nn_, xx_, yy_)
+                    lastx_curve = xx_
+                    lasty_curve = yy_
                 lastx = xx_
                 lasty = yy_
-
+                last_curve = is_curve
+                lastnn = nn_
         return pp
 
     if unfold:
