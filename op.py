@@ -39,6 +39,7 @@ specs = dict(
     internal_support_back_vert_extent=15.0,
     internal_support_back_taper_extent=10.0,
     internal_support_curve_height=10.0,
+    internal_support_top_cut_angle=150.0*np.pi/180.0,
 )
 
 display = dict(
@@ -380,11 +381,10 @@ isr_curve_front = head_front-specs['internal_support_front_margin']
 isr_curve_dy = (isr_curve_front - (bk+specs['internal_support_back_depth']))/2.0
 isr_curve_dz = specs['internal_support_curve_height']
 isr_curve_bottom = specs['chest_height'] - specs['internal_support_top_height'] - isr_curve_dz
-nseg = 8
+nseg = 16
 th = np.arange(nseg+1)/float(nseg) * np.pi
 isr_curve_y = isr_curve_front - isr_curve_dy * (1-np.cos(th))
 isr_curve_z = isr_curve_bottom + isr_curve_dz * np.sin(th)
-print(isr_curve_dy)
 
 internal_support_right = dict(
     origin=(0, 0, 0, np.NaN),
@@ -411,16 +411,32 @@ internal_support_left = mirror(internal_support_right, as_new=True)
 
 internal_support_top = dict(
     origin=(0, 0, 0, np.NaN),
-    unfold=dict(auto='y'),
+    unfold=dict(auto='x', zt=60, cz=isr_curve_bottom, cy=isr_curve_front-isr_curve_dy, cx=0),
 )
 path = ['front_inner'] + [k for k in internal_support_right if k.startswith('curve_')] + ['back_inner_bottom']
-for k, pt in enumerate(path):
-    internal_support_top['outer_right_{}'.format(k)] = (
+for k, pt in enumerate(path[::-1]):
+    internal_support_top['outer_right_{}'.format(nseg+1+1-k)] = (
         rt, internal_support_right[pt][1], internal_support_right[pt][2], k)
+cut_back = (-1+np.cos(specs['internal_support_top_cut_angle']))*isr_curve_dy + isr_curve_front
+for k, pt in enumerate(path):
+
+    if internal_support_right[pt][1] >= cut_back:
+        internal_support_top['inner_right_{}'.format(k)] = (
+            isrx, internal_support_right[pt][1], internal_support_right[pt][2], k+nseg+2)
+
 mirror(internal_support_top)
+# Mark folds on internal support top
+mark_fold_every = 2
 for k in range(len(path)):
-    internal_support_top['fold_{}'.format(k)] = (
-        internal_support_top['outer_right_{}'.format(k)][3], internal_support_top['outer_left_{}'.format(k)][3])
+    if k % mark_fold_every == 0:
+        if 'inner_right_{}'.format(k) in internal_support_top:
+            new_idx = internal_support_top['inner_right_{}'.format(k)][3]
+            internal_support_top['fold_{}_L'.format(k)] = (
+                internal_support_top['outer_left_{}'.format(k)][3], internal_support_top['inner_left_{}'.format(k)][3])
+        else:
+            new_idx = internal_support_top['outer_left_{}'.format(k)][3]
+        internal_support_top['fold_{}'.format(k)] = (
+            internal_support_top['outer_right_{}'.format(k)][3], new_idx)
 
 
 # Arms
@@ -626,9 +642,9 @@ def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_
         yt = part.get('unfold', {}).get('yt', 0)
         zt = part.get('unfold', {}).get('zt', 0)
         # Center of part for auto-unfolds
-        cx = part.get('unfold', {}).get('cx', np.mean(x))
-        cy = part.get('unfold', {}).get('cy', np.mean(y))
-        # cz = part.get('unfold', {}).get('cz', np.mean(z))
+        cx = part.get('unfold', {}).get('cx', np.nanmean(x))
+        cy = part.get('unfold', {}).get('cy', np.nanmean(y))
+        cz = part.get('unfold', {}).get('cz', np.nanmean(z))
         if auto_unfold is None:
             # Rotation about X and Z axes
             xr = part.get('unfold', {}).get('xr', 0) * np.pi/180.0
@@ -650,16 +666,31 @@ def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_
             y00 = copy.copy(y)
             x = (x00-xo)*np.cos(zr)+xo + (y00-yo)*np.sin(zr)
             y = (y00-yo)*np.cos(zr)+yo - (x00-xo)*np.sin(zr)
-        if auto_unfold == 'z':
+        elif auto_unfold == 'z':
             # Automatic unfold while leaving z alone (flatten x-y)
             theta = np.arctan2(y-cy, x-cx) - np.pi
             dth = np.diff(theta)
+            dth[dth > (1.5 * np.pi)] -= 2.0 * np.pi
+            dth[dth < -(1.5 * np.pi)] += 2.0 * np.pi
             sdth = np.sign(dth)
             dx = np.diff(x)
             dy = np.diff(y)
             ds = np.sqrt(dx**2+dy**2) * sdth
 
             x = np.cumsum(np.append(0, ds))
+            y = x*0
+        elif auto_unfold == 'x':
+            # Automatic unfold while leaving x alone (flatten y-z)
+            theta = np.arctan2(z-cz, y-cy) - np.pi
+            dth = np.diff(theta)
+            dth[dth > (1.5 * np.pi)] -= 2.0 * np.pi
+            dth[dth < -(1.5 * np.pi)] += 2.0 * np.pi
+            sdth = np.sign(dth)
+            dy = np.diff(y)
+            dz = np.diff(z)
+            ds = np.sqrt(dz**2+dy**2) * sdth
+
+            z = np.cumsum(np.append(0, ds))
             y = x*0
 
         # Translate
@@ -787,7 +818,7 @@ if 'unfolded_torso_extra' in which_figures:
     plot_unfolded(grill, 1)
     plot_unfolded(internal_support_right, 1)
     plot_unfolded(internal_support_left, 1)
-    plot_unfolded(internal_support_top, 1)
+    plot_unfolded(internal_support_top, 1, mark_points='macro')
 
 # Arms
 if 'unfolded_right_arm' in which_figures:
