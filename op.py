@@ -42,6 +42,7 @@ specs = dict(
     internal_support_back_taper_extent=10.0,
     internal_support_curve_height=10.0,
     internal_support_top_cut_angle=150.0*np.pi/180.0,
+    neck_guard_height=4.0,
 )
 
 display = dict(
@@ -442,6 +443,60 @@ for k in range(len(path)):
         internal_support_top['fold_{}'.format(k)] = (
             internal_support_top['curve_outer_right_{}'.format(k)][3], new_idx)
 
+# Neck guard
+neck_guard = dict(
+    origin=(0, 0, 0, np.NaN),
+    unfold=dict(auto='zchain', xt=50),
+    right_top_front_corner=copy_point(head_cutout['right_front_corner'], 0),
+    right_top_corner=copy_point(head_cutout['right_corner'], 1),
+    right_top_outer_support=(specs['head_cutout_width']/2.0, head_front, specs['chest_height'], 2),
+)
+ngt_pts = [pt for pt in neck_guard if '_top_' in pt]
+for pt in ngt_pts:
+    a = neck_guard[pt]
+    neck_guard[pt.replace('_top_', '_bottom_')] = (a[0], a[1], a[2]-specs['neck_guard_height'], 2*len(ngt_pts)-1-a[3])
+mirror(neck_guard)
+ngt_pts = [pt for pt in neck_guard if '_top_' in pt]
+for pt in ngt_pts:
+    neck_guard['fold_' + pt.replace('_top_', '_')] = (neck_guard[pt][3], neck_guard[pt.replace('_top_', '_bottom_')][3])
+
+neck_guard_front_tab = dict(
+    origin=(0, 0, 0, np.NaN),
+    unfold=dict(xt=50-head_cutout['right_front_corner'][0], xr=90, zo=specs['chest_height'], yo=head_front, xo=0),
+    right_back_corner=(specs['head_cutout_width']/2.0-specs['head_round_depth'], head_front, specs['chest_height'], 0),
+    right_front_corner=(
+        specs['head_cutout_width']/2.0-specs['head_round_depth'], head_front+3, specs['chest_height'], 1),
+)
+mirror(neck_guard_front_tab)
+
+ngrt_dx = 3*np.sqrt(2)/2.0
+ngrt_dy = 3*np.sqrt(2)/2.0
+neck_guard_right_tab = dict(
+    origin=(0, 0, 0, np.NaN),
+    unfold=copy.deepcopy(neck_guard_front_tab['unfold']),
+    inner=(specs['head_cutout_width']/2.0-specs['head_round_depth'], head_front, specs['chest_height'], 0),
+    back=(specs['head_cutout_width']/2.0, head_front-specs['head_round_depth'], specs['chest_height'], 1),
+    outer=(specs['head_cutout_width']/2.0+ngrt_dx, head_front-specs['head_round_depth']+ngrt_dy, specs['chest_height'], 2),
+    front=(specs['head_cutout_width']/2.0-specs['head_round_depth']+ngrt_dx, head_front+ngrt_dy, specs['chest_height'], 3),
+)
+neck_guard_right_tab['unfold']['yr'] = 45
+neck_guard_right_tab['unfold']['xo'] = specs['head_cutout_width']/2.0-specs['head_round_depth']
+neck_guard_left_tab = mirror(neck_guard_right_tab, as_new=True)
+neck_guard_left_tab['unfold']['xt'] = neck_guard_right_tab['unfold']['xt']
+
+neck_back_guard = dict(
+    origin=(0, 0, 0, np.NaN),
+    unfold=dict(auto='x', xt=45, zt=+10),
+    top_right_tab=(
+        specs['head_cutout_width']/2.0, bk+np.max([specs['behind_head_margin']-3, 0]), specs['chest_height'], 0
+    ),
+    top_right=(specs['head_cutout_width']/2.0, bk+specs['behind_head_margin'], specs['chest_height'], 1),
+    bottom_right=(
+        specs['head_cutout_width']/2.0, bk+specs['behind_head_margin'],
+        specs['chest_height']-specs['neck_guard_height'], 2),
+)
+mirror(neck_back_guard)
+neck_back_guard['fold'] = (neck_back_guard['top_right'][-1], neck_back_guard['top_left'][-1])
 
 # Arms
 right_arm_origin = (display['arm_spacex'], 0, display['arm_spacez'], np.NaN)
@@ -645,12 +700,9 @@ def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_
                 if ((xx_ != lastx) or (yy_ != lasty)) and (not is_curve):
                     marky_mark(lastx, xx_, lasty, yy_)
                 if last_curve and ((not is_curve) or diff_curve):
-                    print('close out last curve', lastnn, nn_, lastx_curve, lastx, lasty_curve, lasty)
                     marky_mark(lastx_curve, lastx, lasty_curve, lasty)
-                #print(nn_, lastnn, last_curve and ((not is_curve) or diff_curve), diff_curve, is_curve, last_curve)
 
                 if ((not last_curve) or diff_curve) and is_curve:
-                    print('start new curve', nn_, xx_, yy_)
                     lastx_curve = xx_
                     lasty_curve = yy_
                 lastx = xx_
@@ -723,6 +775,34 @@ def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_
 
             z = np.cumsum(np.append(0, ds))
             y = x*0
+        elif auto_unfold == 'zchain':
+            dx = np.diff(x)
+            dy = np.diff(y)
+            ds = np.sqrt(dy**2 + dx**2)
+            theta_d = np.arctan2(dy, dx)
+            d_theta = np.empty(len(dx))
+            d_theta[0] = 0.0
+            last_theta = d_theta[0]
+            sign_change = np.ones(len(dx))
+            for ii in range(1, len(dx)):
+                if ds[ii] > 0:
+                    d_theta[ii] = theta_d[ii] - last_theta
+                    if d_theta[ii] > np.pi:
+                        d_theta[ii] -= 2*np.pi
+                    if d_theta[ii] < -np.pi:
+                        d_theta[ii] += 2*np.pi
+                    last_theta = theta_d[ii]
+                    if ds[ii-1] > 0:
+                        sign_change[ii] = 1 - 2 * abs(d_theta[ii]) > np.pi/2.0
+                else:
+                    d_theta[ii] = 0
+                # print(ii, 'ds', ds[ii], 'th', theta_d[ii]/np.pi, 'last', last_theta/np.pi, 'd', d_theta[ii]/np.pi)
+
+            sign_change = 1 - 2 * (abs(d_theta) >= np.pi * 0.99)
+            the_sign = np.cumproduct(sign_change)
+
+            x = np.cumsum(np.append(0, ds*the_sign))
+            y = x * 0
 
         # Translate
         x += xt
@@ -809,6 +889,11 @@ if 'assembled' in which_figures:
     plot_path(internal_support_right)
     plot_path(internal_support_left)
     plot_path(internal_support_top)
+    plot_path(neck_guard)
+    plot_path(neck_guard_front_tab)
+    plot_path(neck_guard_right_tab)
+    plot_path(neck_guard_left_tab)
+    plot_path(neck_back_guard)
 
     # Arms
     plot_path(right_arm_top)
@@ -850,6 +935,11 @@ if 'unfolded_torso_extra' in which_figures:
     plot_unfolded(internal_support_right, 1)
     plot_unfolded(internal_support_left, 1)
     plot_unfolded(internal_support_top, 1, mark_points='macro')
+    plot_unfolded(neck_guard, 1)
+    plot_unfolded(neck_guard_right_tab, 1)
+    plot_unfolded(neck_guard_left_tab, 1)
+    plot_unfolded(neck_guard_front_tab, 1)
+    plot_unfolded(neck_back_guard, 1)
 
 # Arms
 if 'unfolded_right_arm' in which_figures:
