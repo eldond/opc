@@ -13,13 +13,15 @@ from op_util import set_axes_equal, mirror, copy_point, make_main_fig, unfold_fi
 from op_plot import plot_path, plot_images, plot_unfolded, plot_info
 
 from op_arm import *
+from op_leg import *
 
 np.seterr(all='raise')
 
 available_figures = [
     'assembled', 'unfolded_torso_back', 'unfolded_torso_extra', 'unfolded_right_arm', 'unfolded_left_arm',
+    'unfolded_right_leg', 'unfolded_left_leg',
 ]
-which_figures = available_figures[0:3]
+which_figures = [available_figures[0], available_figures[5], available_figures[6]]
 mpl.rcParams['figure.figsize'] = [10.75, 8.25]
 
 fig, axs = make_main_fig(which_figures)
@@ -391,6 +393,21 @@ if 'assembled' in which_figures:
     plot_path(left_arm_inner)
     plot_path(left_arm_hand_cutout)
 
+    # Legs
+    plot_path(right_leg_back)
+    plot_path(right_leg_inner)
+    plot_path(right_leg_outer)
+    plot_path(right_leg_front_upper)
+    plot_path(right_leg_under_pad)
+    plot_path(right_leg_front_lower)
+
+    plot_path(left_leg_back)
+    plot_path(left_leg_inner)
+    plot_path(left_leg_outer)
+    plot_path(left_leg_front_upper)
+    plot_path(left_leg_under_pad)
+    plot_path(left_leg_front_lower)
+
     set_axes_equal(axs[0, 0])
     fig.savefig('costume_assembled.pdf')
 
@@ -440,6 +457,22 @@ if 'unfolded_left_arm' in which_figures:
     plot_unfolded(left_arm_back, 3)
     plot_unfolded(left_arm_inner, 3)
     plot_unfolded(left_arm_hand_cutout, 3)
+
+if 'unfolded_right_leg' in which_figures:
+    plot_unfolded(right_leg_back, 4)
+    plot_unfolded(right_leg_inner, 4)
+    plot_unfolded(right_leg_outer, 4)
+    plot_unfolded(right_leg_front_upper, 4)
+    plot_unfolded(right_leg_under_pad, 4)
+    plot_unfolded(right_leg_front_lower, 4)
+
+if 'unfolded_left_leg' in which_figures:
+    plot_unfolded(left_leg_back, 4)
+    plot_unfolded(left_leg_inner, 4)
+    plot_unfolded(left_leg_outer, 4)
+    plot_unfolded(left_leg_front_upper, 4)
+    plot_unfolded(left_leg_under_pad, 4)
+    plot_unfolded(left_leg_front_lower, 4)
 
 for axs_ in axsf:
     if (axs_ is not None) and display['debug_unfold']:
