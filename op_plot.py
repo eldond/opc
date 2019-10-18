@@ -10,12 +10,13 @@ from op_util import make_unfold_fig, unfold_figs
 
 __all__ = ['plot_path', 'plot_images', 'plot_unfolded']
 
+plot_info = {}
 
-def plot_path(part, plot_info, close=True, unfold=False, uidx=0, mark_points=display['mark_points']):
+
+def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_points']):
     """
     Forms a path from the vertices defined for a part and plots it
     :param part: dict
-    :param plot_info: dict
     :param close: bool
     :param unfold: bool
     :param uidx: int
@@ -255,7 +256,7 @@ def plot_path(part, plot_info, close=True, unfold=False, uidx=0, mark_points=dis
     return
 
 
-def plot_images(plot_info):
+def plot_images():
     """Plots reference images behind the wireframe"""
     # Get the pictures
     front_pic = mpl.image.imread(reference_images['front_image'])
@@ -270,6 +271,6 @@ def plot_images(plot_info):
     return
 
 
-def plot_unfolded(part, plot_info, uidx=0, mark_points=display['mark_points']):
-    plot_path(part, plot_info, unfold=True, uidx=uidx, mark_points=mark_points)
+def plot_unfolded(part, uidx=0, mark_points=display['mark_points']):
+    plot_path(part, unfold=True, uidx=uidx, mark_points=mark_points)
     return

@@ -10,7 +10,9 @@ import copy
 
 from op_specs import specs, display, reference_images
 from op_util import set_axes_equal, mirror, copy_point, make_main_fig, unfold_figs
-from op_plot import plot_path, plot_images, plot_unfolded
+from op_plot import plot_path, plot_images, plot_unfolded, plot_info
+
+from op_arm import *
 
 np.seterr(all='raise')
 
@@ -28,12 +30,12 @@ if [wf for wf in which_figures if 'unfolded' in wf]:
 else:
     figaf = axaf = None
 
-plot_info = {
+plot_info.update({
     'fig': fig,
     'axs': axs,
     'figaf': figaf,
     'axaf': axaf,
-}
+})
 
 # General shortcuts
 rt = specs['shoulder_width']/2.0
@@ -347,161 +349,47 @@ neck_back_guard = dict(
 mirror(neck_back_guard)
 neck_back_guard['fold'] = (neck_back_guard['top_right'][-1], neck_back_guard['top_left'][-1])
 
-# Arms
-right_arm_origin = (display['arm_spacex'], 0, display['arm_spacez'], np.NaN)
-ra_pivot_x = rib['front_right_corner'][0] + right_arm_origin[0]
-ra_pivot_y = rib['front_right_corner'][1] + right_arm_origin[1]
-ra_pivot_zt = rib['front_right_corner'][2] + right_arm_origin[2]
-ra_pivot_zb = -specs['grill_height'] + right_arm_origin[2]
-
-right_arm_top = dict(
-    origin=right_arm_origin,
-    unfold=dict(zr=90, yr=-90, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
-    front_right_corner=(copy_point(grill['top_right'], 0)),
-    outer_right_corner=(copy_point(rib['front_right_corner'], 1)),
-    outer_back_corner=(copy_point(back['right_bottom'], 2)),
-    inner_back_corner=(grill['top_right'][0]+specs['arm_top_cut_width'], back['right_bottom'][1], 0, 3),
-    inner_cutout_corner=(
-        grill['top_right'][0]+specs['arm_top_cut_width'], back['right_bottom'][1]+specs['arm_top_cut_depth'], 0, 4,
-    ),
-    inner_front_corner=(grill['top_right'][0], rib['inner_right_corner'][1], 0, 5),
-)
-# xyzo = right_arm_top['outer_right_corner']
-# right_arm_top['unfold'] = dict(zr=90, yr=-90, xo=xyzo[0], yo=xyzo[1], zo=xyzo[2], yt=-xyzo[1]-right_arm_origin[0])
-
-right_arm_bottom = dict(
-    origin=right_arm_origin,
-    unfold=dict(zr=90, yr=90, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zb),
-    front_right_corner=(grill['top_right'][0], grill['top_right'][1], -specs['grill_height'], 0),
-    outer_right_corner=(rib['front_right_corner'][0], rib['front_right_corner'][1], -specs['grill_height'], 1),
-    outer_back_corner=(back['right_bottom'][0], back['right_bottom'][1], -specs['grill_height'], 2),
-    inner_back_corner=(grill['top_right'][0], back['right_bottom'][1], -specs['grill_height'], 3),
-)
-
-right_arm_outer = dict(
-    origin=right_arm_origin,
-    unfold=dict(zr=90, xr=0, yr=0, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
-    # front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
-    outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
-    outer_back_top_corner=copy_point(right_arm_top['outer_back_corner'], 2),
-    outer_back_bottom_corner=(
-        right_arm_top['outer_back_corner'][0], right_arm_top['outer_back_corner'][1], -specs['grill_height'], 3),
-    outer_right_bottom_corner=(
-        right_arm_top['outer_right_corner'][0], right_arm_top['outer_right_corner'][1], -specs['grill_height'], 4),
-    # front_right_bottom_corner=(
-    #     right_arm_top['front_right_corner'][0], right_arm_top['front_right_corner'][1], -specs['grill_height'], 5),
-)
-# right_arm_outer['fold1'] = (
-#     right_arm_outer['outer_right_top_corner'][-1], right_arm_outer['outer_right_bottom_corner'][-1])
-
-right_arm_front = dict(
-    origin=right_arm_origin,
-    unfold=dict(zr=180-specs['prow_angle']*180.0/np.pi, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zt),
-    front_right_top_corner=copy_point(right_arm_top['front_right_corner'], 0),
-    outer_right_top_corner=copy_point(right_arm_top['outer_right_corner'], 1),
-    outer_right_bottom_corner=(
-        right_arm_top['outer_right_corner'][0], right_arm_top['outer_right_corner'][1], -specs['grill_height'], 2),
-    front_right_bottom_corner=(
-        right_arm_top['front_right_corner'][0], right_arm_top['front_right_corner'][1], -specs['grill_height'], 3),
-)
-
-arm_outer_len = right_arm_top['outer_back_corner'][1]-right_arm_top['outer_right_corner'][1]
-right_arm_back = dict(
-    origin=right_arm_origin,
-    unfold=dict(xt=arm_outer_len, yt=-arm_outer_len),
-    top_inner=copy_point(right_arm_top['inner_back_corner'], 0),
-    top_outer=copy_point(right_arm_top['outer_back_corner'], 1),
-    bottom_outer=copy_point(right_arm_bottom['outer_back_corner'], 2),
-    bottom_inner=copy_point(right_arm_bottom['inner_back_corner'], 3),
-    inner=(
-        right_arm_bottom['inner_back_corner'][0], right_arm_bottom['inner_back_corner'][1],
-        specs['arm_back_cover_margin']-specs['grill_height'], 4,
-    ),
-)
-
-arm_width = right_arm_bottom['outer_back_corner'][0]-right_arm_bottom['inner_back_corner'][0]
-right_arm_inner = dict(
-    origin=right_arm_origin,
-    unfold=dict(yr=180, zr=90, xo=ra_pivot_x, yo=ra_pivot_y, zo=ra_pivot_zb, zt=-arm_width, yt=arm_width),
-    inner_top=copy_point(right_arm_top['inner_front_corner'], 0),
-    front_top=copy_point(right_arm_top['front_right_corner'], 1),
-    front_bottom=copy_point(right_arm_bottom['front_right_corner'], 2),
-    back_bottom=copy_point(right_arm_bottom['inner_back_corner'], 3),
-    back_top=copy_point(right_arm_back['inner'], 4),
-    inner=(right_arm_top['inner_front_corner'][0],
-           right_arm_top['inner_cutout_corner'][1], right_arm_back['inner'][2], 5),
-)
-
-fr_y = right_arm_inner['front_top'][1]-specs['hand_hole_margins']['front']
-bk_y = right_arm_inner['front_top'][1]-specs['hand_hole_margins']['front']-specs['hand_hole_depth']
-tp_z = right_arm_inner['front_top'][2]-specs['hand_hole_margins']['top']
-bt_z = right_arm_inner['front_bottom'][2]+specs['hand_hole_margins']['bottom']
-tp_y = right_arm_inner['inner_top'][1]+specs['hand_hole_margins']['back']
-raiit = right_arm_inner['inner_top']
-raii = right_arm_inner['inner']
-bk_z = tp_z - (raiit[2]-raii[2]) / (raiit[1]-raii[1]) * (tp_y-bk_y)
-
-hhrx = right_arm_inner['front_top'][0]
-right_arm_hand_cutout = dict(
-    origin=right_arm_origin,
-    unfold=right_arm_inner['unfold'],
-    top_front=(hhrx, fr_y, tp_z, 0),
-    bottom_front=(hhrx, fr_y, bt_z, 1),
-    bottom_back=(hhrx, bk_y, bt_z, 2),
-    back_top=(hhrx, bk_y, bk_z, 3),
-    top_back=(hhrx, tp_y, tp_z, 4),
-)
-
-left_arm_top = mirror(right_arm_top, as_new=True)
-left_arm_bottom = mirror(right_arm_bottom, as_new=True)
-left_arm_outer = mirror(right_arm_outer, as_new=True)
-left_arm_front = mirror(right_arm_front, as_new=True)
-left_arm_back = mirror(right_arm_back, as_new=True)
-left_arm_inner = mirror(right_arm_inner, as_new=True)
-left_arm_hand_cutout = mirror(right_arm_hand_cutout, as_new=True)
-
-
 if 'assembled' in which_figures:
-    plot_images(plot_info)
+    plot_images()
 
     # Torso
-    plot_path(rib, plot_info)
-    plot_path(right_side, plot_info)
-    plot_path(left_side, plot_info)
-    plot_path(top, plot_info)
-    plot_path(front_right, plot_info)
-    plot_path(front_left, plot_info)
-    plot_path(right_window, plot_info)
-    plot_path(left_window, plot_info)
-    plot_path(back, plot_info)
-    plot_path(head_cutout, plot_info, close=True)
-    plot_path(grill, plot_info)
-    plot_path(grill_bottom, plot_info)
-    plot_path(internal_support_right, plot_info)
-    plot_path(internal_support_left, plot_info)
-    plot_path(internal_support_top, plot_info)
-    plot_path(neck_guard, plot_info)
-    plot_path(neck_guard_front_tab, plot_info)
-    plot_path(neck_guard_right_tab, plot_info)
-    plot_path(neck_guard_left_tab, plot_info)
-    plot_path(neck_back_guard, plot_info)
+    plot_path(rib)
+    plot_path(right_side)
+    plot_path(left_side)
+    plot_path(top)
+    plot_path(front_right)
+    plot_path(front_left)
+    plot_path(right_window)
+    plot_path(left_window)
+    plot_path(back)
+    plot_path(head_cutout, close=True)
+    plot_path(grill)
+    plot_path(grill_bottom)
+    plot_path(internal_support_right)
+    plot_path(internal_support_left)
+    plot_path(internal_support_top)
+    plot_path(neck_guard)
+    plot_path(neck_guard_front_tab)
+    plot_path(neck_guard_right_tab)
+    plot_path(neck_guard_left_tab)
+    plot_path(neck_back_guard)
 
     # Arms
-    plot_path(right_arm_top, plot_info)
-    plot_path(right_arm_bottom, plot_info)
-    plot_path(right_arm_outer, plot_info)
-    plot_path(right_arm_front, plot_info)
-    plot_path(right_arm_back, plot_info)
-    plot_path(right_arm_inner, plot_info)
-    plot_path(right_arm_hand_cutout, plot_info)
+    plot_path(right_arm_top)
+    plot_path(right_arm_bottom)
+    plot_path(right_arm_outer)
+    plot_path(right_arm_front)
+    plot_path(right_arm_back)
+    plot_path(right_arm_inner)
+    plot_path(right_arm_hand_cutout)
 
-    plot_path(left_arm_top, plot_info)
-    plot_path(left_arm_bottom, plot_info)
-    plot_path(left_arm_outer, plot_info)
-    plot_path(left_arm_front, plot_info)
-    plot_path(left_arm_back, plot_info)
-    plot_path(left_arm_inner, plot_info)
-    plot_path(left_arm_hand_cutout, plot_info)
+    plot_path(left_arm_top)
+    plot_path(left_arm_bottom)
+    plot_path(left_arm_outer)
+    plot_path(left_arm_front)
+    plot_path(left_arm_back)
+    plot_path(left_arm_inner)
+    plot_path(left_arm_hand_cutout)
 
     set_axes_equal(axs[0, 0])
     fig.savefig('costume_assembled.pdf')
@@ -512,46 +400,46 @@ plot_info['axsf'] = axsf
 
 # Torso
 if 'unfolded_torso_back' in which_figures:
-    plot_unfolded(back, plot_info)
-    plot_unfolded(top, plot_info)
-    plot_unfolded(head_cutout, plot_info)
-    plot_unfolded(right_side, plot_info, mark_points=False)
-    plot_unfolded(left_side, plot_info)
+    plot_unfolded(back)
+    plot_unfolded(top)
+    plot_unfolded(head_cutout)
+    plot_unfolded(right_side, mark_points=False)
+    plot_unfolded(left_side)
 if 'unfolded_torso_extra' in which_figures:
-    plot_unfolded(front_right, plot_info, 1)
-    plot_unfolded(front_left, plot_info, 1)
-    plot_unfolded(right_window, plot_info, 1)
-    plot_unfolded(left_window, plot_info, 1, mark_points=False)
-    plot_unfolded(rib, plot_info, 1)
-    plot_unfolded(grill_bottom, plot_info, 1)
-    plot_unfolded(grill, plot_info, 1)
-    plot_unfolded(internal_support_right, plot_info, 1)
-    plot_unfolded(internal_support_left, plot_info, 1)
-    plot_unfolded(internal_support_top, plot_info, 1, mark_points='macro')
-    plot_unfolded(neck_guard, plot_info, 1)
-    plot_unfolded(neck_guard_right_tab, plot_info, 1)
-    plot_unfolded(neck_guard_left_tab, plot_info, 1)
-    plot_unfolded(neck_guard_front_tab, plot_info, 1)
-    plot_unfolded(neck_back_guard, plot_info, 1)
+    plot_unfolded(front_right, 1)
+    plot_unfolded(front_left, 1)
+    plot_unfolded(right_window, 1)
+    plot_unfolded(left_window, 1, mark_points=False)
+    plot_unfolded(rib, 1)
+    plot_unfolded(grill_bottom, 1)
+    plot_unfolded(grill, 1)
+    plot_unfolded(internal_support_right, 1)
+    plot_unfolded(internal_support_left, 1)
+    plot_unfolded(internal_support_top, 1, mark_points='macro')
+    plot_unfolded(neck_guard, 1)
+    plot_unfolded(neck_guard_right_tab, 1)
+    plot_unfolded(neck_guard_left_tab, 1)
+    plot_unfolded(neck_guard_front_tab, 1)
+    plot_unfolded(neck_back_guard, 1)
 
 # Arms
 if 'unfolded_right_arm' in which_figures:
-    plot_unfolded(right_arm_outer, plot_info, 2)
-    plot_unfolded(right_arm_front, plot_info, 2)
-    plot_unfolded(right_arm_top, plot_info, 2)
-    plot_unfolded(right_arm_bottom, plot_info, 2)
-    plot_unfolded(right_arm_back, plot_info, 2)
-    plot_unfolded(right_arm_inner, plot_info, 2)
-    plot_unfolded(right_arm_hand_cutout, plot_info, 2)
+    plot_unfolded(right_arm_outer, 2)
+    plot_unfolded(right_arm_front, 2)
+    plot_unfolded(right_arm_top, 2)
+    plot_unfolded(right_arm_bottom, 2)
+    plot_unfolded(right_arm_back, 2)
+    plot_unfolded(right_arm_inner, 2)
+    plot_unfolded(right_arm_hand_cutout, 2)
 
 if 'unfolded_left_arm' in which_figures:
-    plot_unfolded(left_arm_outer, plot_info, 3)
-    plot_unfolded(left_arm_front, plot_info, 3)
-    plot_unfolded(left_arm_top, plot_info, 3)
-    plot_unfolded(left_arm_bottom, plot_info, 3)
-    plot_unfolded(left_arm_back, plot_info, 3)
-    plot_unfolded(left_arm_inner, plot_info, 3)
-    plot_unfolded(left_arm_hand_cutout, plot_info, 3)
+    plot_unfolded(left_arm_outer, 3)
+    plot_unfolded(left_arm_front, 3)
+    plot_unfolded(left_arm_top, 3)
+    plot_unfolded(left_arm_bottom, 3)
+    plot_unfolded(left_arm_back, 3)
+    plot_unfolded(left_arm_inner, 3)
+    plot_unfolded(left_arm_hand_cutout, 3)
 
 for axs_ in axsf:
     if (axs_ is not None) and display['debug_unfold']:
