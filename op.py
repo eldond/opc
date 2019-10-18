@@ -8,59 +8,11 @@ import scipy
 from scipy import interpolate
 import copy
 
+from op_specs import specs, display, reference_images
+from op_util import set_axes_equal, mirror, copy_point, make_main_fig, unfold_figs
+from op_plot import plot_path, plot_images, plot_unfolded
+
 np.seterr(all='raise')
-
-specs = dict(
-    shoulder_width=40.0,
-    chest_depth_at_mid=30.0,
-    arm_hole_width=15.0,
-    behind_arm_margin=5.0,
-    above_arm_margin=5.0,
-    prow_angle=10*np.pi/180.0,
-    center_rib_cutout_width=25.0,
-    center_rib_cutout_depth=5.0,
-    center_rib_cutout_angle=45.0*np.pi/180.0,
-    center_rib_cutout_bevel=5.0,
-    front_slant=10.0*np.pi/180.0,
-    chest_height=25.0,
-    head_cutout_width=20.0,
-    behind_head_margin=2.0,
-    head_cutout_depth=20.0,
-    head_round_depth=5.0,
-    grill_half_width=10.0,
-    grill_height=15.0,
-    arm_top_cut_width=8.0,
-    arm_top_cut_depth=15.0,
-    arm_back_cover_margin=3.0,
-    hand_hole_margins=dict(top=2.0, bottom=2.0, front=2.0, back=2.0),
-    hand_hole_depth=12.0,
-    window_margins=dict(top=3.0, bottom=3.0, outer=3.0, inner=2.0),
-    internal_support_back_depth=7.0,
-    internal_support_top_height=2.0,
-    internal_support_front_margin=1.0,
-    internal_support_back_vert_extent=15.0,
-    internal_support_back_taper_extent=10.0,
-    internal_support_curve_height=10.0,
-    internal_support_top_cut_angle=150.0*np.pi/180.0,
-    neck_guard_height=4.0,
-)
-
-display = dict(
-    head_cutout_angle=0.0,  # 10.0*np.pi/180.0,
-    arm_angle=0.0,  # 10.0*np.pi/180.0,
-    arm_spacex=3.0,
-    arm_spacez=-3.0,
-    all_unfold_dx=[0, 75.0, 55.0, 125.0],
-    all_unfold_dy=[0, 0.0, 80.0, 80.0],
-    debug_unfold=False,
-    mark_points=True,
-)
-
-reference_images = dict(
-    front_image='20190826_202031.jpg',
-    front_image_height=115.0 + 22.0,
-    front_image_center=(-8, -34+specs['chest_height']),
-)
 
 available_figures = [
     'assembled', 'unfolded_torso_back', 'unfolded_torso_extra', 'unfolded_right_arm', 'unfolded_left_arm',
@@ -68,23 +20,7 @@ available_figures = [
 which_figures = available_figures[0:3]
 mpl.rcParams['figure.figsize'] = [10.75, 8.25]
 
-if 'assembled' in which_figures:
-    # fig, axs = plt.subplots(2, 2)
-    fig = plt.figure()
-    axs = np.array([[
-        fig.add_subplot(221, projection='3d'), fig.add_subplot(222)],
-        [fig.add_subplot(223), fig.add_subplot(224)],
-    ])
-    axs[1, 1].set_xlabel('x')
-    axs[1, 1].set_ylabel('y')
-    axs[1, 0].set_xlabel('x')
-    axs[1, 0].set_ylabel('z')
-    axs[0, 1].set_xlabel('y')
-    axs[0, 1].set_ylabel('z')
-    for ax in axs.flatten():
-        ax.set_aspect('equal', adjustable='box')
-else:
-    fig = axs = None
+fig, axs = make_main_fig(which_figures)
 
 if [wf for wf in which_figures if 'unfolded' in wf]:
     figaf, axaf = plt.subplots(1)
@@ -92,103 +28,12 @@ if [wf for wf in which_figures if 'unfolded' in wf]:
 else:
     figaf = axaf = None
 
-unfold_figs = []
-
-
-def make_unfold_fig():
-    if display['debug_unfold']:
-        figf_ = plt.figure()
-        axf = np.array([[
-            figf_.add_subplot(221, projection='3d'), figf_.add_subplot(222)],
-            [figf_.add_subplot(223), figf_.add_subplot(224)],
-        ])
-        axf[1, 1].set_xlabel('x')
-        axf[1, 1].set_ylabel('y')
-        axf[1, 0].set_xlabel('x')
-        axf[1, 0].set_ylabel('z')
-        axf[0, 1].set_xlabel('y')
-        axf[0, 1].set_ylabel('z')
-    else:
-        figf_, axf = plt.subplots(1, squeeze=False)
-        axf[0, 0].set_xlabel('x')
-        axf[0, 0].set_ylabel('z')
-    for ax_ in axf.flatten():
-        ax_.set_aspect('equal', adjustable='box')
-
-    unfold_figs.append(figf_)
-
-    return axf
-
-
-def set_axes_equal(ax3):
-    """
-    Make axes of 3D plot have equal scale so that spheres appear as spheres,
-    cubes as cubes, etc..  This is one possible solution to Matplotlib's
-    ax3.set_aspect('equal') and ax3.axis('equal') not working for 3D.
-
-    https://stackoverflow.com/a/31364297/6605826
-
-    :param ax3: a Matplotlib axes instance with 3D projection
-    """
-
-    x_limits = ax3.get_xlim3d()
-    y_limits = ax3.get_ylim3d()
-    z_limits = ax3.get_zlim3d()
-
-    x_range = abs(x_limits[1] - x_limits[0])
-    x_middle = np.mean(x_limits)
-    y_range = abs(y_limits[1] - y_limits[0])
-    y_middle = np.mean(y_limits)
-    z_range = abs(z_limits[1] - z_limits[0])
-    z_middle = np.mean(z_limits)
-
-    # The plot bounding box is a sphere in the sense of the infinity
-    # norm, hence I call half the max range the plot radius.
-    plot_radius = 0.5*max([x_range, y_range, z_range])
-
-    ax3.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
-    ax3.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
-    ax3.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
-    return ax3
-
-
-def mirror(part, as_new=False):
-    """
-    Mirrors a part, either as a new part, or by completing half or a part.
-    Vertices to be mirrored should be named right_* or left_*
-    :param part: dict
-    :param as_new: bool
-    :return: dict
-    """
-    ind = [vv[3] for k, vv in part.items() if (not k.startswith('fold')) and (isinstance(vv, tuple))]
-    ii = int(np.nanmax(ind)) + 1
-    new_part = {}
-    for k, vv in part.items():
-        if k.startswith('fold'):
-            if as_new:
-                new_part[k] = vv
-        elif k == 'unfold':
-            if as_new:
-                newv = copy.copy(vv)
-                newv['xt'] = -newv.get('xt', 0)
-                newv['xo'] = -newv.get('xo', 0)
-                newv['zr'] = -newv.get('zr', 0)
-                newv['yr'] = -newv.get('yr', 0)
-                new_part[k] = newv
-        elif ((not np.isnan(vv[3])) and (('left' in k) or ('right' in k))) or as_new:
-            newk = k.replace('right', 'left')
-            newv = (-vv[0], vv[1], vv[2], (vv[3] if as_new else 2*ii-vv[3]))
-            new_part[newk] = newv
-    if as_new:
-        return new_part
-    else:
-        part.update(new_part)
-        return part
-
-
-def copy_point(point, new_index):
-    return point[0], point[1], point[2], new_index
-
+plot_info = {
+    'fig': fig,
+    'axs': axs,
+    'figaf': figaf,
+    'axaf': axaf,
+}
 
 # General shortcuts
 rt = specs['shoulder_width']/2.0
@@ -476,8 +321,12 @@ neck_guard_right_tab = dict(
     unfold=copy.deepcopy(neck_guard_front_tab['unfold']),
     inner=(specs['head_cutout_width']/2.0-specs['head_round_depth'], head_front, specs['chest_height'], 0),
     back=(specs['head_cutout_width']/2.0, head_front-specs['head_round_depth'], specs['chest_height'], 1),
-    outer=(specs['head_cutout_width']/2.0+ngrt_dx, head_front-specs['head_round_depth']+ngrt_dy, specs['chest_height'], 2),
-    front=(specs['head_cutout_width']/2.0-specs['head_round_depth']+ngrt_dx, head_front+ngrt_dy, specs['chest_height'], 3),
+    outer=(
+        specs['head_cutout_width']/2.0+ngrt_dx, head_front-specs['head_round_depth']+ngrt_dy, specs['chest_height'], 2
+    ),
+    front=(
+        specs['head_cutout_width']/2.0-specs['head_round_depth']+ngrt_dx, head_front+ngrt_dy, specs['chest_height'], 3
+    ),
 )
 neck_guard_right_tab['unfold']['yr'] = 45
 neck_guard_right_tab['unfold']['xo'] = specs['head_cutout_width']/2.0-specs['head_round_depth']
@@ -612,353 +461,97 @@ left_arm_inner = mirror(right_arm_inner, as_new=True)
 left_arm_hand_cutout = mirror(right_arm_hand_cutout, as_new=True)
 
 
-def plot_path(part, close=True, unfold=False, uidx=0, mark_points=display['mark_points']):
-    """
-    Forms a path from the vertices defined for a part and plots it
-    :param part: dict
-    :param close: bool
-    :param unfold: bool
-    :param uidx: int
-    :param mark_points: bool
-    """
-    x, y, z, i = np.array([np.array(point) for k, point in part.items() if 'fold' not in k[0:6]]).T
-    names = np.array([k for k in part if 'fold' not in k[0:6]])
-    origin = x[np.isnan(i)], y[np.isnan(i)], z[np.isnan(i)]
-    names = names[~np.isnan(i)]
-    x = x[~np.isnan(i)] + origin[0]
-    y = y[~np.isnan(i)] + origin[1]
-    z = z[~np.isnan(i)] + origin[2]
-    i = i[~np.isnan(i)]
-    j = i.argsort()
-    x = x[j]
-    y = y[j]
-    z = z[j]
-    i = i[j]
-    names = names[j]
-    if close:
-        x = np.append(x, x[0])
-        y = np.append(y, y[0])
-        z = np.append(z, z[0])
-        i = np.append(i, -1000)
-        names = np.append(names, 'automatic_closer____')
-
-    def draw_path(axx, xx, yy, **kw):
-        pp = axx.plot(xx, yy, **kw)
-        pcx = np.nanmean(xx)
-        pcy = np.nanmean(yy)
-        co = pp[0].get_color()
-
-        def marky_mark(x0_, x1_, y0_, y1_):
-            ccx = (x1_ + x0_) / 2.0
-            ccy = (y1_ + y0_) / 2.0
-            outx = ccx - pcx
-            outy = ccy - pcy
-            ll = np.sqrt((outx ** 2 + outy ** 2))
-            outs = 3.0
-            outx *= outs / ll
-            outy *= outs / ll
-            if (outy > 0) and (outx / outy > 4):
-                outx = outs
-                outy = 0
-            if (outx > 0) and (outy / outx > 4):
-                outy = outs
-                outx = 0
-            m1x = x1_ * 0.75 + x0_ * 0.25
-            m2x = x1_ * 0.25 + x0_ * 0.75
-            m1y = y1_ * 0.75 + y0_ * 0.25
-            m2y = y1_ * 0.25 + y0_ * 0.75
-            dxx = x1_ - x0_
-            dyy = y1_ - y0_
-            # direction = np.sign(np.arctan2(dyy, dxx))
-            # outx *= direction
-            # outy *= direction
-            axx.plot([m1x + outx, x1_ + outx], [m1y + outy, y1_ + outy], color=co, lw=0.5, alpha=0.2)
-            axx.plot([m2x + outx, x0_ + outx], [m2y + outy, y0_ + outy], color=co, lw=0.5, alpha=0.2)
-            axx.text(
-                ccx + outx, ccy + outy, '{:0.2f}\n{:0.2f}'.format(abs(dxx), abs(dyy)),
-                color=co, ha='center', va='center', size=5,
-            )
-
-        if mark_points and unfold:
-            lastx = np.NaN
-            lasty = np.NaN
-            last_curve = False
-            lastnn = ''
-            lastx_curve = np.NaN
-            lasty_curve = np.NaN
-            for xx_, yy_, nn_ in zip(xx, yy, names):
-                is_curve = nn_.startswith('curve')
-                diff_curve = '_'.join(lastnn.split('_')[:-1]) != '_'.join(nn_.split('_')[:-1])
-                if (not (last_curve and is_curve)) or diff_curve:
-                    if xx_ != lastx:
-                        axx.axvline(xx_, color='gray', lw=0.5, alpha=0.2)
-                    if yy_ != lasty:
-                        axx.axhline(yy_, color='gray', lw=0.5, alpha=0.2)
-                if last_curve and ((not is_curve) or diff_curve):
-                    axx.axvline(lastx, color='gray', lw=0.5, alpha=0.2)
-                    axx.axhline(lasty, color='gray', lw=0.5, alpha=0.2)
-                if ((xx_ != lastx) or (yy_ != lasty)) and (not is_curve):
-                    marky_mark(lastx, xx_, lasty, yy_)
-                if last_curve and ((not is_curve) or diff_curve):
-                    marky_mark(lastx_curve, lastx, lasty_curve, lasty)
-
-                if ((not last_curve) or diff_curve) and is_curve:
-                    lastx_curve = xx_
-                    lasty_curve = yy_
-                lastx = xx_
-                lasty = yy_
-                last_curve = is_curve
-                lastnn = nn_
-        return pp
-
-    if unfold:
-        while (uidx+1) > len(axsf):
-            axsf.append(None)
-        if axsf[uidx] is None:
-            axsf[uidx] = make_unfold_fig()
-        x0 = copy.copy(x)
-        y0 = copy.copy(y)
-        z0 = copy.copy(z)
-        auto_unfold = part.get('unfold', {}).get('auto', None)
-        # Translation along all axes
-        xt = part.get('unfold', {}).get('xt', 0)
-        yt = part.get('unfold', {}).get('yt', 0)
-        zt = part.get('unfold', {}).get('zt', 0)
-        # Center of part for auto-unfolds
-        cx = part.get('unfold', {}).get('cx', np.nanmean(x))
-        cy = part.get('unfold', {}).get('cy', np.nanmean(y))
-        cz = part.get('unfold', {}).get('cz', np.nanmean(z))
-        if auto_unfold is None:
-            # Rotation about X and Z axes
-            xr = part.get('unfold', {}).get('xr', 0) * np.pi/180.0
-            yr = part.get('unfold', {}).get('yr', 0) * np.pi/180.0
-            zr = part.get('unfold', {}).get('zr', 0) * np.pi/180.0
-            # Origin of rotation
-            xo = part.get('unfold', {}).get('xo', 0)
-            yo = part.get('unfold', {}).get('yo', 0)
-            zo = part.get('unfold', {}).get('zo', 0)
-            # Rotate about x axis
-            y = (y0-yo)*np.cos(xr)+yo - (z0-zo)*np.sin(xr)
-            z = (z0-zo)*np.cos(xr)+zo + (y0-yo)*np.sin(xr)
-            # Rotate about y axis
-            z00 = copy.copy(z)
-            x = (x0 - xo) * np.cos(yr) + xo - (z00 - zo) * np.sin(yr)
-            z = (z00 - zo) * np.cos(yr) + zo + (x0 - xo) * np.sin(yr)
-            # Rotate about z axis
-            x00 = copy.copy(x)
-            y00 = copy.copy(y)
-            x = (x00-xo)*np.cos(zr)+xo + (y00-yo)*np.sin(zr)
-            y = (y00-yo)*np.cos(zr)+yo - (x00-xo)*np.sin(zr)
-        elif auto_unfold == 'z':
-            # Automatic unfold while leaving z alone (flatten x-y)
-            theta = np.arctan2(y-cy, x-cx) - np.pi
-            dth = np.diff(theta)
-            dth[dth > (1.5 * np.pi)] -= 2.0 * np.pi
-            dth[dth < -(1.5 * np.pi)] += 2.0 * np.pi
-            sdth = np.sign(dth)
-            dx = np.diff(x)
-            dy = np.diff(y)
-            ds = np.sqrt(dx**2+dy**2) * sdth
-
-            x = np.cumsum(np.append(0, ds))
-            y = x*0
-        elif auto_unfold == 'x':
-            # Automatic unfold while leaving x alone (flatten y-z)
-            theta = np.arctan2(z-cz, y-cy) - np.pi
-            dth = np.diff(theta)
-            dth[dth > (1.5 * np.pi)] -= 2.0 * np.pi
-            dth[dth < -(1.5 * np.pi)] += 2.0 * np.pi
-            sdth = np.sign(dth)
-            dy = np.diff(y)
-            dz = np.diff(z)
-            ds = np.sqrt(dz**2+dy**2) * sdth
-
-            z = np.cumsum(np.append(0, ds))
-            y = x*0
-        elif auto_unfold == 'zchain':
-            dx = np.diff(x)
-            dy = np.diff(y)
-            ds = np.sqrt(dy**2 + dx**2)
-            theta_d = np.arctan2(dy, dx)
-            d_theta = np.empty(len(dx))
-            d_theta[0] = 0.0
-            last_theta = d_theta[0]
-            sign_change = np.ones(len(dx))
-            for ii in range(1, len(dx)):
-                if ds[ii] > 0:
-                    d_theta[ii] = theta_d[ii] - last_theta
-                    if d_theta[ii] > np.pi:
-                        d_theta[ii] -= 2*np.pi
-                    if d_theta[ii] < -np.pi:
-                        d_theta[ii] += 2*np.pi
-                    last_theta = theta_d[ii]
-                    if ds[ii-1] > 0:
-                        sign_change[ii] = 1 - 2 * abs(d_theta[ii]) > np.pi/2.0
-                else:
-                    d_theta[ii] = 0
-                # print(ii, 'ds', ds[ii], 'th', theta_d[ii]/np.pi, 'last', last_theta/np.pi, 'd', d_theta[ii]/np.pi)
-
-            sign_change = 1 - 2 * (abs(d_theta) >= np.pi * 0.99)
-            the_sign = np.cumproduct(sign_change)
-
-            x = np.cumsum(np.append(0, ds*the_sign))
-            y = x * 0
-
-        # Translate
-        x += xt
-        y += yt
-        z += zt
-        axu = axsf[uidx]
-
-        paf = axaf.plot(x+display['all_unfold_dx'][uidx], z+display['all_unfold_dy'][uidx])
-    else:
-        axu = axs
-        paf = None
-
-    if unfold and not display['debug_unfold']:
-        p10 = draw_path(axu[0, 0], x, z)
-        p00 = p01 = p11 = None
-    else:
-        p11 = draw_path(axu[1, 1], x, y)
-        p10 = draw_path(axu[1, 0], x, z)
-        p01 = draw_path(axu[0, 1], y, z)
-        p00 = axu[0, 0].plot(x, y, z)
-
-    folds = [k for k in part if k.startswith('fold')]
-    for fold in folds:
-        f = part[fold]
-        xf = np.append(x[i == f[0]], x[i == f[1]])
-        yf = np.append(y[i == f[0]], y[i == f[1]])
-        zf = np.append(
-            z[i == f[0]], z[i == f[1]])
-        if unfold:
-            axaf.plot(
-                xf+display['all_unfold_dx'][uidx], zf+display['all_unfold_dy'][uidx],
-                linestyle='--', color=paf[0].get_color(),
-            )
-
-        if unfold and not display['debug_unfold']:
-            axu[0, 0].plot(xf, zf, linestyle='--', color=p10[0].get_color())
-        else:
-            axu[1, 1].plot(xf, yf, linestyle='--', color=p11[0].get_color())
-            axu[1, 0].plot(xf, zf, linestyle='--', color=p10[0].get_color())
-            axu[0, 1].plot(yf, zf, linestyle='--', color=p01[0].get_color())
-            axu[0, 0].plot(xf, yf, zf, linestyle='--', color=p00[0].get_color())
-    return
-
-
-def plot_images():
-    """Plots reference images behind the wireframe"""
-    # Get the pictures
-    front_pic = mpl.image.imread(reference_images['front_image'])
-    front_pic = np.swapaxes(front_pic, 0, 1)
-
-    # Get dimensions
-    fh = reference_images['front_image_height']
-    fw = fh * np.shape(front_pic)[1] / np.shape(front_pic)[0]
-    fcx = float(reference_images['front_image_center'][0])
-    fcy = float(reference_images['front_image_center'][1])
-    axs[1, 0].imshow(front_pic, extent=(
-        fcx - fw / 2.0, fcx + fw / 2.0,
-        fcy - fh / 2.0, fcy + fh / 2.0,
-    ))
-    return
-
-
-def plot_unfolded(part, uidx=0, mark_points=display['mark_points']):
-    plot_path(part, unfold=True, uidx=uidx, mark_points=mark_points)
-    return
-
-
 if 'assembled' in which_figures:
-    plot_images()
+    plot_images(plot_info)
 
     # Torso
-    plot_path(rib)
-    plot_path(right_side)
-    plot_path(left_side)
-    plot_path(top)
-    plot_path(front_right)
-    plot_path(front_left)
-    plot_path(right_window)
-    plot_path(left_window)
-    plot_path(back)
-    plot_path(head_cutout, close=True)
-    plot_path(grill)
-    plot_path(grill_bottom)
-    plot_path(internal_support_right)
-    plot_path(internal_support_left)
-    plot_path(internal_support_top)
-    plot_path(neck_guard)
-    plot_path(neck_guard_front_tab)
-    plot_path(neck_guard_right_tab)
-    plot_path(neck_guard_left_tab)
-    plot_path(neck_back_guard)
+    plot_path(rib, plot_info)
+    plot_path(right_side, plot_info)
+    plot_path(left_side, plot_info)
+    plot_path(top, plot_info)
+    plot_path(front_right, plot_info)
+    plot_path(front_left, plot_info)
+    plot_path(right_window, plot_info)
+    plot_path(left_window, plot_info)
+    plot_path(back, plot_info)
+    plot_path(head_cutout, plot_info, close=True)
+    plot_path(grill, plot_info)
+    plot_path(grill_bottom, plot_info)
+    plot_path(internal_support_right, plot_info)
+    plot_path(internal_support_left, plot_info)
+    plot_path(internal_support_top, plot_info)
+    plot_path(neck_guard, plot_info)
+    plot_path(neck_guard_front_tab, plot_info)
+    plot_path(neck_guard_right_tab, plot_info)
+    plot_path(neck_guard_left_tab, plot_info)
+    plot_path(neck_back_guard, plot_info)
 
     # Arms
-    plot_path(right_arm_top)
-    plot_path(right_arm_bottom)
-    plot_path(right_arm_outer)
-    plot_path(right_arm_front)
-    plot_path(right_arm_back)
-    plot_path(right_arm_inner)
-    plot_path(right_arm_hand_cutout)
+    plot_path(right_arm_top, plot_info)
+    plot_path(right_arm_bottom, plot_info)
+    plot_path(right_arm_outer, plot_info)
+    plot_path(right_arm_front, plot_info)
+    plot_path(right_arm_back, plot_info)
+    plot_path(right_arm_inner, plot_info)
+    plot_path(right_arm_hand_cutout, plot_info)
 
-    plot_path(left_arm_top)
-    plot_path(left_arm_bottom)
-    plot_path(left_arm_outer)
-    plot_path(left_arm_front)
-    plot_path(left_arm_back)
-    plot_path(left_arm_inner)
-    plot_path(left_arm_hand_cutout)
+    plot_path(left_arm_top, plot_info)
+    plot_path(left_arm_bottom, plot_info)
+    plot_path(left_arm_outer, plot_info)
+    plot_path(left_arm_front, plot_info)
+    plot_path(left_arm_back, plot_info)
+    plot_path(left_arm_inner, plot_info)
+    plot_path(left_arm_hand_cutout, plot_info)
 
     set_axes_equal(axs[0, 0])
     fig.savefig('costume_assembled.pdf')
 
 # Unfolded
 axsf = []
+plot_info['axsf'] = axsf
+
 # Torso
 if 'unfolded_torso_back' in which_figures:
-    plot_unfolded(back)
-    plot_unfolded(top)
-    plot_unfolded(head_cutout)
-    plot_unfolded(right_side, mark_points=False)
-    plot_unfolded(left_side)
+    plot_unfolded(back, plot_info)
+    plot_unfolded(top, plot_info)
+    plot_unfolded(head_cutout, plot_info)
+    plot_unfolded(right_side, plot_info, mark_points=False)
+    plot_unfolded(left_side, plot_info)
 if 'unfolded_torso_extra' in which_figures:
-    plot_unfolded(front_right, 1)
-    plot_unfolded(front_left, 1)
-    plot_unfolded(right_window, 1)
-    plot_unfolded(left_window, 1, mark_points=False)
-    plot_unfolded(rib, 1)
-    plot_unfolded(grill_bottom, 1)
-    plot_unfolded(grill, 1)
-    plot_unfolded(internal_support_right, 1)
-    plot_unfolded(internal_support_left, 1)
-    plot_unfolded(internal_support_top, 1, mark_points='macro')
-    plot_unfolded(neck_guard, 1)
-    plot_unfolded(neck_guard_right_tab, 1)
-    plot_unfolded(neck_guard_left_tab, 1)
-    plot_unfolded(neck_guard_front_tab, 1)
-    plot_unfolded(neck_back_guard, 1)
+    plot_unfolded(front_right, plot_info, 1)
+    plot_unfolded(front_left, plot_info, 1)
+    plot_unfolded(right_window, plot_info, 1)
+    plot_unfolded(left_window, plot_info, 1, mark_points=False)
+    plot_unfolded(rib, plot_info, 1)
+    plot_unfolded(grill_bottom, plot_info, 1)
+    plot_unfolded(grill, plot_info, 1)
+    plot_unfolded(internal_support_right, plot_info, 1)
+    plot_unfolded(internal_support_left, plot_info, 1)
+    plot_unfolded(internal_support_top, plot_info, 1, mark_points='macro')
+    plot_unfolded(neck_guard, plot_info, 1)
+    plot_unfolded(neck_guard_right_tab, plot_info, 1)
+    plot_unfolded(neck_guard_left_tab, plot_info, 1)
+    plot_unfolded(neck_guard_front_tab, plot_info, 1)
+    plot_unfolded(neck_back_guard, plot_info, 1)
 
 # Arms
 if 'unfolded_right_arm' in which_figures:
-    plot_unfolded(right_arm_outer, 2)
-    plot_unfolded(right_arm_front, 2)
-    plot_unfolded(right_arm_top, 2)
-    plot_unfolded(right_arm_bottom, 2)
-    plot_unfolded(right_arm_back, 2)
-    plot_unfolded(right_arm_inner, 2)
-    plot_unfolded(right_arm_hand_cutout, 2)
+    plot_unfolded(right_arm_outer, plot_info, 2)
+    plot_unfolded(right_arm_front, plot_info, 2)
+    plot_unfolded(right_arm_top, plot_info, 2)
+    plot_unfolded(right_arm_bottom, plot_info, 2)
+    plot_unfolded(right_arm_back, plot_info, 2)
+    plot_unfolded(right_arm_inner, plot_info, 2)
+    plot_unfolded(right_arm_hand_cutout, plot_info, 2)
 
 if 'unfolded_left_arm' in which_figures:
-    plot_unfolded(left_arm_outer, 3)
-    plot_unfolded(left_arm_front, 3)
-    plot_unfolded(left_arm_top, 3)
-    plot_unfolded(left_arm_bottom, 3)
-    plot_unfolded(left_arm_back, 3)
-    plot_unfolded(left_arm_inner, 3)
-    plot_unfolded(left_arm_hand_cutout, 3)
+    plot_unfolded(left_arm_outer, plot_info, 3)
+    plot_unfolded(left_arm_front, plot_info, 3)
+    plot_unfolded(left_arm_top, plot_info, 3)
+    plot_unfolded(left_arm_bottom, plot_info, 3)
+    plot_unfolded(left_arm_back, plot_info, 3)
+    plot_unfolded(left_arm_inner, plot_info, 3)
+    plot_unfolded(left_arm_hand_cutout, plot_info, 3)
 
 for axs_ in axsf:
     if (axs_ is not None) and display['debug_unfold']:
